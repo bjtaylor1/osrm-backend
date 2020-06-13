@@ -42,7 +42,8 @@ function setup()
     barrier_blacklist = Set {
       'yes',
       'wall',
-      'fence'
+      'fence',
+      'gate',
     },
 
     access_tag_whitelist = Set {
@@ -106,6 +107,7 @@ function setup()
     -- reduce the driving speed by 30% for unsafe roads
     -- only used for cyclability metric
     unsafe_highway_list = {
+      trunk = 0.4,
       primary = 0.5,
       secondary = 0.65,
       tertiary = 0.8,
@@ -119,6 +121,8 @@ function setup()
     },
 
     bicycle_speeds = {
+      trunk = default_speed,
+      trunk_link = default_speed,
       cycleway = default_speed,
       primary = default_speed,
       primary_link = default_speed,
@@ -296,6 +300,18 @@ function handle_bicycle_tags(profile,way,result,data)
 
   -- maxspeed
   limit( result, data.maxspeed, data.maxspeed_forward, data.maxspeed_backward )
+
+  if data.maxspeed > 110 then -- don't allow routing down motorways, or de-facto motorways
+    result.forward_speed = 0
+    result.backward_speed = 0
+  elseif data.maxspeed >= 95 then
+    local restriction = way:get_value_by_key('restriction')
+    if restriction == 'no_stopping' and data.highway == 'trunk' then
+      -- a trunk road with restriction='no_stopping' and speed limit 60mph still fairly unpleasant, e.g. the A9
+      result.forward_speed = 0
+      result.backward_speed = 0
+    end
+  end
 
   -- not routable if no speed assigned
   -- this avoid assertions in debug builds

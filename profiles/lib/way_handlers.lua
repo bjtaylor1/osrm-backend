@@ -356,6 +356,11 @@ function WayHandlers.surface(profile,way,result,data)
   local surface = way:get_value_by_key("surface")
   local tracktype = way:get_value_by_key("tracktype")
   local smoothness = way:get_value_by_key("smoothness")
+  local highway = way:get_value_by_key('highway')
+
+  if ((surface == nil or surface == '') and (highway == nil or highway == '' or highway == 'service' or highway == 'track')) then
+    surface = 'mud'
+  end
 
   if surface and profile.surface_speeds[surface] then
     result.forward_speed = math.min(profile.surface_speeds[surface], result.forward_speed)
