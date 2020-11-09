@@ -302,14 +302,14 @@ function handle_bicycle_tags(profile,way,result,data)
   limit( result, data.maxspeed, data.maxspeed_forward, data.maxspeed_backward )
 
   if data.maxspeed > 110 then -- don't allow routing down motorways, or de-facto motorways
-    result.forward_speed = 0
-    result.backward_speed = 0
+    result.forward_speed = 1 
+    result.backward_speed = 1
   elseif data.maxspeed >= 95 then
     local restriction = way:get_value_by_key('restriction')
     if restriction == 'no_stopping' and data.highway == 'trunk' then
       -- a trunk road with restriction='no_stopping' and speed limit 60mph still fairly unpleasant, e.g. the A9
-      result.forward_speed = 0
-      result.backward_speed = 0
+      result.forward_speed = 1
+      result.backward_speed = 1
     end
   end
 
