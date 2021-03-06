@@ -177,21 +177,15 @@ function setup()
 
     surface_speeds = {
       asphalt = default_speed,
+      concrete = default_speed,
+      paved = default_speed,
       ["cobblestone:flattened"] = 10,
+      ["concrete:lanes"] = 10,
+      ["concrete:plates"] == 10,
       paving_stones = 10,
       compacted = 10,
-      cobblestone = 6,
-      unpaved = 6,
-      fine_gravel = 6,
-      gravel = 6,
-      pebblestone = 6,
-      ground = 6,
-      dirt = 6,
-      earth = 6,
-      grass = 6,
-      mud = 3,
-      sand = 3,
-      sett = 10
+      fine_gravel = 10,
+      metal = 10
     },
 
     classes = Sequence {
