@@ -181,7 +181,7 @@ function setup()
       paved = default_speed,
       ["cobblestone:flattened"] = 10,
       ["concrete:lanes"] = 10,
-      ["concrete:plates"] == 10,
+      ["concrete:plates"] = 10,
       paving_stones = 10,
       compacted = 10,
       fine_gravel = 10,
@@ -261,7 +261,7 @@ function handle_bicycle_tags(profile,way,result,data)
 
   local wayid = way:id()
   print(wayid)
-  
+
   -- access
   data.access = find_access_tag(way, profile.access_tags_hierarchy)
   if data.access and profile.access_tag_blacklist[data.access] then
