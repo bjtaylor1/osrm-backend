@@ -366,10 +366,12 @@ function WayHandlers.surface(profile,way,result,data)
     result.forward_speed = math.min(profile.surface_speeds[surface], result.forward_speed)
     result.backward_speed = math.min(profile.surface_speeds[surface], result.backward_speed)
   else
-    result.forward_speed = 0
-    result.backward_speed = 0
-    result.forward_mode = mode.inaccessible
-    result.backward_mode = mode.inaccessible
+    if(!profile.assumed_surfaced_highways[highway]) then
+      result.forward_speed = 0
+      result.backward_speed = 0
+      result.forward_mode = mode.inaccessible
+      result.backward_mode = mode.inaccessible
+    end
   end
 
   if tracktype and profile.tracktype_speeds[tracktype] then

@@ -139,6 +139,21 @@ function setup()
       path = 12
     },
 
+    assumed_surfaced_highways = Set {
+      'trunk',
+      'trunk_link',
+      'primary',
+      'primary_link',
+      'secondary',
+      'secondary_link',
+      'tertiary',
+      'tertiary_link',
+      'residential',
+      'unclassified',
+      'living_street',
+      'road',
+    },
+
     pedestrian_speeds = {
       footway = walking_speed,
       pedestrian = walking_speed,
