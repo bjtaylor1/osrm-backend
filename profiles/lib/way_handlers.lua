@@ -376,9 +376,9 @@ function WayHandlers.surface(profile,way,result,data)
   end
 
   local wayid = way:id()
-  if(wayid == 590284549) then
+--  if(wayid == 590284549) then
     print('way '..wayid..', forward_speed = '..result.forward_speed..', backward_speed='..result.backward_speed)
-  end
+--  end
 end
 
 -- scale speeds to get better average driving times
