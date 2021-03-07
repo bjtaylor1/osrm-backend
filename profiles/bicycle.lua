@@ -259,6 +259,9 @@ function handle_bicycle_tags(profile,way,result,data)
     return false
   end
 
+  local wayid = way:id()
+  print(wayid)
+  
   -- access
   data.access = find_access_tag(way, profile.access_tags_hierarchy)
   if data.access and profile.access_tag_blacklist[data.access] then
