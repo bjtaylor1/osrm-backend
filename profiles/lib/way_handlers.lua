@@ -365,7 +365,13 @@ function WayHandlers.surface(profile,way,result,data)
   if surface and profile.surface_speeds[surface] then
     result.forward_speed = math.min(profile.surface_speeds[surface], result.forward_speed)
     result.backward_speed = math.min(profile.surface_speeds[surface], result.backward_speed)
+  else
+    result.forward_speed = 0
+    result.backward_speed = 0
+    result.forward_mode = mode.inaccessible
+    result.backward_mode = mode.inaccessible
   end
+
   if tracktype and profile.tracktype_speeds[tracktype] then
     result.forward_speed = math.min(profile.tracktype_speeds[tracktype], result.forward_speed)
     result.backward_speed = math.min(profile.tracktype_speeds[tracktype], result.backward_speed)
@@ -376,9 +382,9 @@ function WayHandlers.surface(profile,way,result,data)
   end
 
   local wayid = way:id()
---  if(wayid == 590284549) then
+  if(wayid == 604671594) then
     print('way '..wayid..', forward_speed = '..result.forward_speed..', backward_speed='..result.backward_speed)
---  end
+  end
 end
 
 -- scale speeds to get better average driving times
