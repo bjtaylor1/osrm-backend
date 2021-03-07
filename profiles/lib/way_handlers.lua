@@ -366,7 +366,8 @@ function WayHandlers.surface(profile,way,result,data)
     result.forward_speed = math.min(profile.surface_speeds[surface], result.forward_speed)
     result.backward_speed = math.min(profile.surface_speeds[surface], result.backward_speed)
   else
-    if(!profile.assumed_surfaced_highways[highway]) then
+    if(profile.assumed_surfaced_highways[highway] == nil) then
+      -- if it's a bad or unknown surface, AND it's not a highway (all valid highways are assumed to be surfaced, as they don't always have explicit surface tags) then don't route down it.
       result.forward_speed = 0
       result.backward_speed = 0
       result.forward_mode = mode.inaccessible
