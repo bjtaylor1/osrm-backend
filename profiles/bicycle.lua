@@ -35,8 +35,7 @@ function setup()
     use_public_transport      = true,
 
     allowed_start_modes = Set {
-      mode.cycling,
-      mode.pushing_bike
+      mode.cycling
     },
 
     barrier_blacklist = Set {
@@ -304,8 +303,8 @@ function handle_bicycle_tags(profile,way,result,data)
 
   cycleway_handler(profile,way,result,data)
 
-  bike_push_handler(profile,way,result,data)
-
+  --bike_push_handler(profile,way,result,data)
+  -- not called (we're too posh to push)
 
   -- maxspeed
   limit( result, data.maxspeed, data.maxspeed_forward, data.maxspeed_backward )
@@ -473,6 +472,7 @@ function cycleway_handler(profile,way,result,data)
 end
 
 function bike_push_handler(profile,way,result,data)
+  -- not called
   -- pushing bikes - if no other mode found
   if result.forward_mode == mode.inaccessible or result.backward_mode == mode.inaccessible or
     result.forward_speed == -1 or result.backward_speed == -1 then
