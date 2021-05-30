@@ -315,9 +315,8 @@ function handle_bicycle_tags(profile,way,result,data)
     result.forward_speed = 1 
     result.backward_speed = 1
   elseif data.maxspeed >= 95 then
-    local restriction = way:get_value_by_key('restriction')
-    if restriction == 'no_stopping' and data.highway == 'trunk' then
-      -- a trunk road with restriction='no_stopping' and speed limit 60mph still fairly unpleasant, e.g. the A9
+    if data.highway == 'trunk' then
+      -- a trunk road speed limit 60mph still fairly unpleasant, e.g. the A9, A82, A85, etc...
       result.forward_speed = 1
       result.backward_speed = 1
     end
