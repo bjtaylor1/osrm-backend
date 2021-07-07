@@ -12,6 +12,11 @@ cmake --build .
 
 sudo cmake --build . --target install
 
+## Bootstrapping?
+
+OneDrive/Documents/routerinit.sh
+
+
 ## Open Source Routing Machine
 
 | Linux / macOS | Windows | Code Coverage |
