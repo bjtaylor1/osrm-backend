@@ -98,7 +98,9 @@ void RequestHandler::HandleRequest(const http::request &current_request, http::r
                                             std::to_string(position) + ": \"" + context + "\"";
         }
 
-        current_reply.headers.emplace_back("Access-Control-Allow-Origin", "*");
+        //current_reply.headers.emplace_back("Access-Control-Allow-Origin", "*");
+	//don't! we'll get nginx to do it instead
+	
         current_reply.headers.emplace_back("Access-Control-Allow-Methods", "GET");
         current_reply.headers.emplace_back("Access-Control-Allow-Headers",
                                            "X-Requested-With, Content-Type");
