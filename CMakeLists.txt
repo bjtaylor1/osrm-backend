@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.2)
 
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_CURRENT_BINARY_DIR AND NOT MSVC_IDE)
   message(FATAL_ERROR "In-source builds are not allowed.
@@ -22,10 +22,11 @@ option(ENABLE_MASON "Use mason for dependencies" OFF)
 option(ENABLE_CCACHE "Speed up incremental rebuilds via ccache" ON)
 option(BUILD_TOOLS "Build OSRM tools" OFF)
 option(BUILD_PACKAGE "Build OSRM package" OFF)
+option(BUILD_ROUTED "Build osrm-routed HTTP server" ON)
 option(ENABLE_ASSERTIONS "Use assertions in release mode" OFF)
+option(ENABLE_DEBUG_LOGGING "Use debug logging in release mode" OFF)
 option(ENABLE_COVERAGE "Build with coverage instrumentalisation" OFF)
 option(ENABLE_SANITIZER "Use memory sanitizer for Debug build" OFF)
-option(ENABLE_STXXL "Use STXXL library" OFF)
 option(ENABLE_LTO "Use LTO if available" OFF)
 option(ENABLE_FUZZING "Fuzz testing using LLVM's libFuzzer" OFF)
 option(ENABLE_GOLD_LINKER "Use GNU gold linker if available" ON)
@@ -36,8 +37,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 if(ENABLE_MASON)
   # versions in use
-  set(MASON_BOOST_VERSION "1.65.1")
-  set(MASON_STXXL_VERSION "1.4.1-1")
+  set(MASON_BOOST_VERSION "1.73.0")
   set(MASON_EXPAT_VERSION "2.2.0")
   set(MASON_LUA_VERSION "5.2.4")
   set(MASON_BZIP2_VERSION "1.0.6")
@@ -56,6 +56,12 @@ endif()
 # be compatible with version handling before cmake 3.x
 if (POLICY CMP0048)
   cmake_policy(SET CMP0048 OLD)
+endif()
+if (POLICY CMP0057)
+  cmake_policy(SET CMP0057 NEW)
+endif()
+if (POLICY CMP0074)
+  cmake_policy(SET CMP0074 NEW)
 endif()
 project(OSRM C CXX)
 
@@ -157,7 +163,11 @@ add_library(CONTRACTOR OBJECT ${ContractorGlob})
 add_library(UPDATER OBJECT ${UpdaterGlob})
 add_library(STORAGE OBJECT ${StorageGlob})
 add_library(ENGINE OBJECT ${EngineGlob})
-add_library(SERVER OBJECT ${ServerGlob})
+
+if (BUILD_ROUTED) 
+  add_library(SERVER OBJECT ${ServerGlob})
+  add_executable(osrm-routed src/tools/routed.cpp $<TARGET_OBJECTS:SERVER> $<TARGET_OBJECTS:UTIL>)
+endif()
 
 set_target_properties(UTIL PROPERTIES LINKER_LANGUAGE CXX)
 
@@ -165,7 +175,6 @@ add_executable(osrm-extract src/tools/extract.cpp)
 add_executable(osrm-partition src/tools/partition.cpp)
 add_executable(osrm-customize src/tools/customize.cpp)
 add_executable(osrm-contract src/tools/contract.cpp)
-add_executable(osrm-routed src/tools/routed.cpp $<TARGET_OBJECTS:SERVER> $<TARGET_OBJECTS:UTIL>)
 add_executable(osrm-datastore src/tools/store.cpp $<TARGET_OBJECTS:MICROTAR> $<TARGET_OBJECTS:UTIL>)
 add_library(osrm src/osrm/osrm.cpp $<TARGET_OBJECTS:ENGINE> $<TARGET_OBJECTS:STORAGE> $<TARGET_OBJECTS:MICROTAR> $<TARGET_OBJECTS:UTIL>)
 add_library(osrm_contract src/osrm/contractor.cpp $<TARGET_OBJECTS:CONTRACTOR> $<TARGET_OBJECTS:UTIL>)
@@ -227,6 +236,7 @@ endif()
 if(CMAKE_BUILD_TYPE MATCHES Debug OR CMAKE_BUILD_TYPE MATCHES RelWithDebInfo)
   message(STATUS "Configuring debug mode flags")
   set(ENABLE_ASSERTIONS ON)
+  set(ENABLE_DEBUG_LOGGING ON)
 endif()
 
 if(NOT CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
@@ -472,13 +482,6 @@ if(ENABLE_MASON)
   mason_use(boost_libsystem VERSION ${MASON_BOOST_VERSION})
   set(Boost_SYSTEM_LIBRARY ${MASON_PACKAGE_boost_libsystem_STATIC_LIBS})
 
-  if (ENABLE_STXXL)
-    mason_use(stxxl VERSION ${MASON_STXXL_VERSION})
-    add_dependency_includes(${MASON_PACKAGE_stxxl_INCLUDE_DIRS})
-    set(MAYBE_STXXL_LIBRARY ${MASON_PACKAGE_stxxl_STATIC_LIBS})
-    add_definitions(-DUSE_STXXL_LIBRARY)
-  endif()
-
   mason_use(expat VERSION ${MASON_EXPAT_VERSION})
   add_dependency_includes(${MASON_PACKAGE_expat_INCLUDE_DIRS})
   set(EXPAT_LIBRARIES ${MASON_PACKAGE_expat_STATIC_LIBS})
@@ -515,38 +518,28 @@ if(ENABLE_MASON)
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${LINKER_FLAGS}")
 
   # current mason packages target -D_GLIBCXX_USE_CXX11_ABI=0
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0")
+  add_dependency_defines(-D_GLIBCXX_USE_CXX11_ABI=0)
 
   # note: we avoid calling find_package(Osmium ...) here to ensure that the
   # expat and bzip2 are used from mason rather than the system
   include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/third_party/libosmium/include)
 else()
-
-  find_package(Boost 1.54 REQUIRED COMPONENTS ${BOOST_COMPONENTS})
-  add_dependency_includes(${Boost_INCLUDE_DIRS})
-  if(WIN32 AND Boost_VERSION VERSION_LESS 106200)
-    message(FATAL_ERROR "Building with MSVC needs Boost 1.62 with CXX11_CONSTEXPR support")
+  if (BUILD_ROUTED)
+    # osrm-routed requires newer boost:asio 
+    find_package(Boost 1.70 REQUIRED COMPONENTS ${BOOST_COMPONENTS})
+  else()
+    find_package(Boost 1.60 REQUIRED COMPONENTS ${BOOST_COMPONENTS})
   endif()
+  add_dependency_includes(${Boost_INCLUDE_DIRS})
 
   find_package(TBB REQUIRED)
   add_dependency_includes(${TBB_INCLUDE_DIR})
-  if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
-    set(TBB_LIBRARIES ${TBB_DEBUG_LIBRARIES})
+  if(WIN32)
+    set(TBB_LIBRARIES optimized ${TBB_LIBRARY} optimized ${TBB_MALLOC_LIBRARY} debug ${TBB_LIBRARY_DEBUG} debug ${TBB_MALLOC_LIBRARY_DEBUG})
   endif()
 
   find_package(EXPAT REQUIRED)
   add_dependency_includes(${EXPAT_INCLUDE_DIRS})
-
-  if (ENABLE_STXXL)
-    find_package(STXXL)
-    if (STXXL_FOUND)
-      add_dependency_includes(${STXXL_INCLUDE_DIR})
-      set(MAYBE_STXXL_LIBRARY ${STXXL_LIBRARY})
-      add_definitions(-DUSE_STXXL_LIBRARY)
-    else()
-      MESSAGE(STATUS "STXXL was requested but not found, default STL will be used")
-    endif()
-  endif()
 
   find_package(BZip2 REQUIRED)
   add_dependency_includes(${BZIP2_INCLUDE_DIR})
@@ -607,15 +600,6 @@ add_dependency_defines(-DBOOST_SPIRIT_USE_PHOENIX_V3)
 add_dependency_defines(-DBOOST_RESULT_OF_USE_DECLTYPE)
 add_dependency_defines(-DBOOST_FILESYSTEM_NO_DEPRECATED)
 
-if (ENABLE_STXXL)
-  set(OpenMP_FIND_QUIETLY ON)
-  find_package(OpenMP)
-  if(OPENMP_FOUND)
-    message(STATUS "OpenMP support found. Linking just in case for stxxl")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-  endif()
-endif()
-
 add_definitions(${OSRM_DEFINES})
 include_directories(SYSTEM ${DEPENDENCIES_INCLUDE_DIRS})
 
@@ -638,7 +622,9 @@ target_link_libraries(osrm-extract osrm_extract ${Boost_PROGRAM_OPTIONS_LIBRARY}
 target_link_libraries(osrm-partition osrm_partition ${Boost_PROGRAM_OPTIONS_LIBRARY})
 target_link_libraries(osrm-customize osrm_customize ${Boost_PROGRAM_OPTIONS_LIBRARY})
 target_link_libraries(osrm-contract osrm_contract ${Boost_PROGRAM_OPTIONS_LIBRARY})
-target_link_libraries(osrm-routed osrm ${Boost_PROGRAM_OPTIONS_LIBRARY} ${OPTIONAL_SOCKET_LIBS} ${ZLIB_LIBRARY})
+if (BUILD_ROUTED)
+  target_link_libraries(osrm-routed osrm ${Boost_PROGRAM_OPTIONS_LIBRARY} ${OPTIONAL_SOCKET_LIBS} ${ZLIB_LIBRARY})
+endif()
 
 set(EXTRACTOR_LIBRARIES
     ${BZIP2_LIBRARIES}
@@ -648,7 +634,6 @@ set(EXTRACTOR_LIBRARIES
     ${EXPAT_LIBRARIES}
     ${USED_LUA_LIBRARIES}
     ${OSMIUM_LIBRARIES}
-    ${MAYBE_STXXL_LIBRARY}
     ${TBB_LIBRARIES}
     ${ZLIB_LIBRARY}
     ${MAYBE_COVERAGE_LIBRARIES})
@@ -682,7 +667,6 @@ set(CONTRACTOR_LIBRARIES
     ${BOOST_BASE_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
     ${USED_LUA_LIBRARIES}
-    ${MAYBE_STXXL_LIBRARY}
     ${TBB_LIBRARIES}
     ${MAYBE_RT_LIBRARY}
     ${MAYBE_COVERAGE_LIBRARIES})
@@ -702,7 +686,6 @@ set(STORAGE_LIBRARIES
 set(UTIL_LIBRARIES
     ${BOOST_BASE_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
-    ${MAYBE_STXXL_LIBRARY}
     ${TBB_LIBRARIES}
     ${MAYBE_COVERAGE_LIBRARIES}
     ${ZLIB_LIBRARY})
@@ -724,7 +707,7 @@ install(TARGETS osrm-components DESTINATION bin)
 if(BUILD_TOOLS)
   message(STATUS "Activating OSRM internal tools")
   add_executable(osrm-io-benchmark src/tools/io-benchmark.cpp $<TARGET_OBJECTS:UTIL>)
-  target_link_libraries(osrm-io-benchmark ${BOOST_BASE_LIBRARIES})
+  target_link_libraries(osrm-io-benchmark ${BOOST_BASE_LIBRARIES} ${TBB_LIBRARIES})
 
   install(TARGETS osrm-io-benchmark DESTINATION bin)
 endif()
@@ -734,6 +717,11 @@ if (ENABLE_ASSERTIONS)
   add_definitions(-DBOOST_ENABLE_ASSERT_HANDLER)
 endif()
 
+if (ENABLE_DEBUG_LOGGING)
+  message(STATUS "Enabling debug logging")
+  add_definitions(-DENABLE_DEBUG_LOGGING)
+endif()
+
 # Add RPATH info to executables so that when they are run after being installed
 # (i.e., from /usr/local/bin/) the linker can find library dependencies. For
 # more info see http://www.cmake.org/Wiki/CMake_RPATH_handling
@@ -741,7 +729,9 @@ set_property(TARGET osrm-extract PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 set_property(TARGET osrm-partition PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 set_property(TARGET osrm-contract PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 set_property(TARGET osrm-datastore PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
-set_property(TARGET osrm-routed PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
+if (BUILD_ROUTED)
+  set_property(TARGET osrm-routed PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
+endif()
 
 file(GLOB VariantGlob third_party/variant/include/mapbox/*.hpp)
 file(GLOB FlatbuffersGlob third_party/flatbuffers/include/flatbuffers/*.h)
@@ -770,7 +760,9 @@ install(TARGETS osrm-partition DESTINATION bin)
 install(TARGETS osrm-customize DESTINATION bin)
 install(TARGETS osrm-contract DESTINATION bin)
 install(TARGETS osrm-datastore DESTINATION bin)
-install(TARGETS osrm-routed DESTINATION bin)
+if (BUILD_ROUTED)
+  install(TARGETS osrm-routed DESTINATION bin)
+endif()
 install(TARGETS osrm DESTINATION lib)
 install(TARGETS osrm_extract DESTINATION lib)
 install(TARGETS osrm_partition DESTINATION lib)
@@ -824,9 +816,25 @@ set(PKGCONFIG_INCLUDE_DIR "${CMAKE_INSTALL_PREFIX}/include")
 list(APPEND DEPENDENCIES_INCLUDE_DIRS "${PKGCONFIG_INCLUDE_DIR}")
 list(APPEND DEPENDENCIES_INCLUDE_DIRS "${PKGCONFIG_INCLUDE_DIR}/osrm")
 JOIN("-I${DEPENDENCIES_INCLUDE_DIRS}" " -I" PKGCONFIG_OSRM_INCLUDE_FLAGS)
-JOIN("${ENGINE_LIBRARIES}" " " PKGCONFIG_OSRM_DEPENDENT_LIBRARIES)
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/pkgconfig.in libosrm.pc @ONLY)
+# Boost uses imported targets, we need to use a generator expression to extract
+# the link libraries to be written to the pkg-config file.
+foreach(engine_lib ${ENGINE_LIBRARIES})
+  if("${engine_lib}" MATCHES "^Boost.*")
+    list(APPEND PKGCONFIG_DEPENDENT_LIBRARIES "$<TARGET_LINKER_FILE:${engine_lib}>")
+  else()
+    list(APPEND PKGCONFIG_DEPENDENT_LIBRARIES "${engine_lib}")
+  endif()
+endforeach(engine_lib)
+JOIN("${PKGCONFIG_DEPENDENT_LIBRARIES}" " " PKGCONFIG_OSRM_DEPENDENT_LIBRARIES)
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/pkgconfig.in pkgconfig.configured @ONLY)
+file(GENERATE
+     OUTPUT
+     ${PROJECT_BINARY_DIR}/libosrm.pc
+     INPUT
+     ${PROJECT_BINARY_DIR}/pkgconfig.configured)
+
 install(FILES ${PROJECT_BINARY_DIR}/libosrm.pc DESTINATION ${PKGCONFIG_LIBRARY_DIR}/pkgconfig)
 
 # uninstall target

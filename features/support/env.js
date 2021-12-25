@@ -22,14 +22,9 @@ module.exports = function () {
         this.PROFILES_PATH = path.resolve(this.ROOT_PATH, 'profiles');
         this.FIXTURES_PATH = path.resolve(this.ROOT_PATH, 'unit_tests/fixtures');
         this.BIN_PATH = process.env.OSRM_BUILD_DIR && process.env.OSRM_BUILD_DIR || path.resolve(this.ROOT_PATH, 'build');
-        var stxxl_config = path.resolve(this.ROOT_PATH, 'test/.stxxl');
-        if (!fs.existsSync(stxxl_config)) {
-            return callback(new Error('*** '+stxxl_config+ 'does not exist'));
-        }
-
         this.DATASET_NAME = 'cucumber';
         this.PLATFORM_WINDOWS = process.platform.match(/^win.*/);
-        this.DEFAULT_ENVIRONMENT = Object.assign({STXXLCFG: stxxl_config}, process.env);
+        this.DEFAULT_ENVIRONMENT = process.env;
         this.DEFAULT_PROFILE = 'bicycle';
         this.DEFAULT_INPUT_FORMAT = 'osm';
         this.DEFAULT_LOAD_METHOD = process.argv[process.argv.indexOf('-m') +1].match('mmap') ? 'mmap' : 'datastore';
@@ -72,10 +67,13 @@ module.exports = function () {
 
         this.OSRM_EXTRACT_PATH = path.resolve(util.format('%s/%s%s', this.BIN_PATH, 'osrm-extract', this.EXE));
         this.OSRM_CONTRACT_PATH = path.resolve(util.format('%s/%s%s', this.BIN_PATH, 'osrm-contract', this.EXE));
+        this.OSRM_CUSTOMIZE_PATH = path.resolve(util.format('%s/%s%s', this.BIN_PATH, 'osrm-customize', this.EXE));
+        this.OSRM_PARTITION_PATH = path.resolve(util.format('%s/%s%s', this.BIN_PATH, 'osrm-partition', this.EXE));
         this.OSRM_ROUTED_PATH = path.resolve(util.format('%s/%s%s', this.BIN_PATH, 'osrm-routed', this.EXE));
         this.LIB_OSRM_EXTRACT_PATH = util.format('%s/' + this.LIB, this.BIN_PATH, 'osrm_extract'),
-        this.LIB_OSRM_GUIDANCE_PATH = util.format('%s/' + this.LIB, this.BIN_PATH, 'osrm_guidance'),
         this.LIB_OSRM_CONTRACT_PATH = util.format('%s/' + this.LIB, this.BIN_PATH, 'osrm_contract'),
+        this.LIB_OSRM_CUSTOMIZE_PATH = util.format('%s/' + this.LIB, this.BIN_PATH, 'osrm_customize'),
+        this.LIB_OSRM_PARTITION_PATH = util.format('%s/' + this.LIB, this.BIN_PATH, 'osrm_partition'),
         this.LIB_OSRM_PATH = util.format('%s/' + this.LIB, this.BIN_PATH, 'osrm');
 
         // eslint-disable-next-line no-console
@@ -116,7 +114,7 @@ module.exports = function () {
         };
 
         var q = d3.queue();
-        [this.OSRM_EXTRACT_PATH, this.OSRM_CONTRACT_PATH, this.OSRM_ROUTED_PATH].forEach(bin => { q.defer(verify, bin); });
+        [this.OSRM_EXTRACT_PATH, this.OSRM_CONTRACT_PATH, this.OSRM_CUSTOMIZE_PATH, this.OSRM_PARTITION_PATH, this.OSRM_ROUTED_PATH].forEach(bin => { q.defer(verify, bin); });
         q.awaitAll(callback);
     };
 
