@@ -1,100 +1,114 @@
-var util = require('util');
+// Step definitions for testing nearest point snapping API
+import util from 'util';
 
-var flatbuffers = require('../support/flatbuffers').flatbuffers;
-var FBResult = require('../support/fbresult_generated').osrm.engine.api.fbresult.FBResult;
+import flatbuffers from 'flatbuffers';
+import { osrm } from '../support/fbresult_generated.js';
+const FBResult = osrm.engine.api.fbresult.FBResult;
+import { When } from '@cucumber/cucumber';
 
-module.exports = function () {
-    this.When(/^I request nearest I should get$/, (table, callback) => {
-        this.reprocessAndLoadData((e) => {
-            if (e) return callback(e);
-            var testRow = (row, ri, cb) => {
-                var inNode = this.findNodeByName(row.in);
-                if (!inNode) throw new Error(util.format('*** unknown in-node "%s"', row.in));
+When(/^I request nearest I should get$/, function (table, callback) {
+  this.reprocessAndLoadData((e) => {
+    if (e) return callback(e);
+    const testRow = function (row, ri, cb) {
 
-                var outNode = this.findNodeByName(row.out);
-                if (!outNode) throw new Error(util.format('*** unknown out-node "%s"', row.out));
+      const inNode = this.findNodeByName(row.in);
+      if (!inNode) throw new Error(util.format('*** unknown in-node "%s"', row.in));
 
-                this.requestNearest(inNode, this.queryParams, (err, response) => {
-                    if (err) return cb(err);
-                    var coord;
+      this.requestNearest(inNode, this.queryParams, (err, response, body) => {
+        if (err) return cb(err);
+        let coord;
+        const headers = new Set(table.raw()[0]);
 
-                    if (response.statusCode === 200 && response.body.length) {
-                        var json = JSON.parse(response.body);
+        const got = { in: row.in };
 
-                        coord = json.waypoints[0].location;
+        if (body.length) {
+          const json = JSON.parse(body);
+          got.code = json.code;
 
-                        var got = { in: row.in, out: row.out };
+          if (response.statusCode === 200) {
 
-                        Object.keys(row).forEach((key) => {
-                            if (key === 'out') {
-                                if (this.FuzzyMatch.matchLocation(coord, outNode)) {
-                                    got[key] = row[key];
-                                } else {
-                                    row[key] = util.format('%s [%d,%d]', row[key], outNode.lat, outNode.lon);
-                                }
-                            }
-                        });
+            if (headers.has('data_version')) {
+              got.data_version = json.data_version || '';
+            }
 
-                        cb(null, got);
-                    }
-                    else {
-                        cb();
-                    }
-                });
-            };
+            if (json.waypoints && json.waypoints.length && row.out) {
+              coord = json.waypoints[0].location;
 
-            this.processRowsAndDiff(table, testRow, callback);
-        });
-    });
+              got.out = row.out;
 
-    this.When(/^I request nearest with flatbuffers I should get$/, (table, callback) => {
-        this.reprocessAndLoadData((e) => {
-            if (e) return callback(e);
-            var testRow = (row, ri, cb) => {
-                var inNode = this.findNodeByName(row.in);
-                if (!inNode) throw new Error(util.format('*** unknown in-node "%s"', row.in));
+              const outNode = this.findNodeByName(row.out);
+              if (!outNode) throw new Error(util.format('*** unknown out-node "%s"', row.out));
 
-                var outNode = this.findNodeByName(row.out);
-                if (!outNode) throw new Error(util.format('*** unknown out-node "%s"', row.out));
+              Object.keys(row).forEach((key) => {
+                if (key === 'out') {
+                  if (this.FuzzyMatch.matchLocation(coord, outNode)) {
+                    got[key] = row[key];
+                  } else {
+                    row[key] = util.format('%s [%d,%d]', row[key], outNode.lat, outNode.lon);
+                  }
+                }
+              });
+            }
 
-                this.queryParams.output = 'flatbuffers';
-                this.requestNearest(inNode, this.queryParams, (err, response) => {
-                    if (err) return cb(err);
-                    var coord;
+          }
+          cb(null, got);
+        }
+        else {
+          cb();
+        }
+      });
+    }.bind(this);
 
-                    if (response.statusCode === 200 && response.body.length) {
-                        var body = response.body;
-                        var bytes = new Uint8Array(body.length);
-                        for (var indx = 0; indx < body.length; ++indx) {
-                            bytes[indx] = body.charCodeAt(indx);
-                        }
-                        var buf = new flatbuffers.ByteBuffer(bytes);
-                        var fb = FBResult.getRootAsFBResult(buf);
-                        var location = fb.waypoints(0).location();
+    this.processRowsAndDiff(table, testRow, callback);
+  });
+});
 
-                        coord = [location.longitude(), location.latitude()];
+When(/^I request nearest with flatbuffers I should get$/, function (table, callback) {
+  this.reprocessAndLoadData((e) => {
+    if (e) return callback(e);
+    const testRow = function (row, ri, cb) {
+      const inNode = this.findNodeByName(row.in);
+      if (!inNode) throw new Error(util.format('*** unknown in-node "%s"', row.in));
 
-                        var got = { in: row.in, out: row.out };
+      const outNode = this.findNodeByName(row.out);
+      if (!outNode) throw new Error(util.format('*** unknown out-node "%s"', row.out));
 
-                        Object.keys(row).forEach((key) => {
-                            if (key === 'out') {
-                                if (this.FuzzyMatch.matchLocation(coord, outNode)) {
-                                    got[key] = row[key];
-                                } else {
-                                    row[key] = util.format('%s [%d,%d]', row[key], outNode.lat, outNode.lon);
-                                }
-                            }
-                        });
+      this.queryParams.output = 'flatbuffers';
+      this.requestNearest(inNode, this.queryParams, (err, response, body) => {
+        if (err) return cb(err);
+        let coord;
 
-                        cb(null, got);
-                    }
-                    else {
-                        cb();
-                    }
-                });
-            };
+        if (response.statusCode === 200 && body.length) {
+          const bytes = new Uint8Array(body.length);
+          for (let indx = 0; indx < body.length; ++indx) {
+            bytes[indx] = body.charCodeAt(indx);
+          }
+          const buf = new flatbuffers.ByteBuffer(bytes);
+          const fb = FBResult.getRootAsFBResult(buf);
+          const location = fb.waypoints(0).location();
 
-            this.processRowsAndDiff(table, testRow, callback);
-        });
-    });
-};
+          coord = [location.longitude(), location.latitude()];
+
+          const got = { in: row.in, out: row.out };
+
+          Object.keys(row).forEach((key) => {
+            if (key === 'out') {
+              if (this.FuzzyMatch.matchLocation(coord, outNode)) {
+                got[key] = row[key];
+              } else {
+                row[key] = util.format('%s [%d,%d]', row[key], outNode.lat, outNode.lon);
+              }
+            }
+          });
+
+          cb(null, got);
+        }
+        else {
+          cb();
+        }
+      });
+    }.bind(this);
+
+    this.processRowsAndDiff(table, testRow, callback);
+  });
+});

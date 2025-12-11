@@ -5,24 +5,24 @@
 #include "extractor/name_table.hpp"
 #include "extractor/restriction.hpp"
 #include "extractor/serialization.hpp"
-
 #include "util/coordinate_calculation.hpp"
+#include "util/integer_range.hpp"
 
 #include "util/exception.hpp"
 #include "util/exception_utils.hpp"
 #include "util/for_each_indexed.hpp"
+#include "util/for_each_pair.hpp"
 #include "util/log.hpp"
+#include "util/std_hash.hpp"
 #include "util/timing_util.hpp"
 
 #include <boost/assert.hpp>
+#include <boost/core/ignore_unused.hpp>
 #include <boost/numeric/conversion/cast.hpp>
 
 #include <tbb/parallel_sort.h>
 
-#include <chrono>
 #include <limits>
-#include <mutex>
-#include <sstream>
 
 namespace
 {
@@ -152,11 +152,231 @@ std::tuple<OSMNodeID, OSMNodeID, OSMNodeID> find_turn_nodes(const oe::NodesOfWay
     }
     return std::make_tuple(SPECIAL_OSM_NODEID, SPECIAL_OSM_NODEID, SPECIAL_OSM_NODEID);
 }
+
+// Via-node paths describe a relation between the two segments closest
+// to the shared via-node on the from and to ways.
+// from: [a, b, c, d, e]
+// to: [f, g, h, i, j]
+//
+// The via node establishes the orientation of the from/to intersection when choosing the
+// segments.
+//   via    |  node path
+//   a=f    |     b,a,g
+//   a=j    |     b,a,i
+//   e=f    |     d,e,g
+//   e=j    |     d,e,i
+oe::ViaNodePath find_via_node_path(const std::string &turn_relation_type,
+                                   const oe::NodesOfWay &from_segment,
+                                   const oe::NodesOfWay &to_segment,
+                                   const OSMNodeID via_node,
+                                   const std::function<NodeID(OSMNodeID)> &to_internal_node)
+{
+
+    OSMNodeID from, via, to;
+    std::tie(from, via, to) = find_turn_nodes(from_segment, to_segment, via_node);
+    if (via == SPECIAL_OSM_NODEID)
+    {
+        // unconnected
+        osrm::util::Log(logDEBUG) << turn_relation_type
+                                  << " references unconnected way: " << from_segment.way_id;
+        return oe::ViaNodePath{SPECIAL_NODEID, SPECIAL_NODEID, SPECIAL_NODEID};
+    }
+    return oe::ViaNodePath{to_internal_node(from), to_internal_node(via), to_internal_node(to)};
+}
+
+// Via way paths are comprised of:
+// 1. The segment in the from way that intersects with the via ways
+// 2. All segments that make up the via path
+// 3. The segment in the to way that intersects with the via path.
+//
+// from: [a, b, c, d, e]
+// via: [[f, g, h, i, j], [k, l], [m, n, o]]
+// to: [p, q, r, s]
+//
+// First establish the orientation of the from/via intersection by finding which end
+// nodes both ways share. From this we can select the from segment.
+//
+// intersect | from segment | next_connection
+//    a=f    |      b,a     |        f
+//    a=j    |      b,a     |        j
+//    e=f    |      e,d     |        f
+//    e=j    |      e,d     |        j
+//
+// Use the next connection to inform the orientation of the first via
+// way and the intersection between first and second via ways.
+//
+// next_connection | intersect | via result  | next_next_connection
+//       f         |    j=k    | [f,g,h,i,j] |      k
+//       f         |    j=l    | [f,g,h,i,j] |      l
+//       j         |    f=k    | [j,i,h,g,f] |      k
+//       j         |    f=l    | [j,i,h,g,f] |      l
+//
+// This is continued for the remaining via ways, appending to the via result
+//
+// The final via/to intersection also uses the next_connection information in a similar fashion.
+//
+// next_connection | intersect | to_segment
+//       m         |    o=p    |    p,q
+//       m         |    o=s    |    s,r
+//       o         |    m=p    |    p,q
+//       o         |    m=s    |    s,r
+//
+// The final result is a list of nodes that represent a valid from->via->to path through the
+// ways.
+//
+// E.g. if intersection nodes are a=j, f=l, k=o, m=s
+// the result will be {e [d,c,b,a,i,h,g,f,k,n,m] r}
+oe::ViaWayPath find_via_way_path(const std::string &turn_relation_type,
+                                 const oe::NodesOfWay &from_way,
+                                 const std::vector<oe::NodesOfWay> &via_ways,
+                                 const oe::NodesOfWay &to_way,
+                                 const std::function<NodeID(OSMNodeID)> &to_internal_node)
+{
+    BOOST_ASSERT(!via_ways.empty());
+
+    oe::ViaWayPath way_path;
+
+    // Find the orientation of the connected ways starting with the from-via intersection.
+    OSMNodeID from, via;
+    std::tie(from, via, std::ignore) =
+        find_turn_nodes(from_way, via_ways.front(), SPECIAL_OSM_NODEID);
+    if (via == SPECIAL_OSM_NODEID)
+    {
+        osrm::util::Log(logDEBUG) << turn_relation_type
+                                  << " has unconnected from and via ways: " << from_way.way_id
+                                  << ", " << via_ways.front().way_id;
+        return oe::ViaWayPath{SPECIAL_NODEID, {}, SPECIAL_NODEID};
+    }
+    way_path.from = to_internal_node(from);
+    way_path.via.push_back(to_internal_node(via));
+
+    // Use the connection node from the previous intersection to inform our conversion of
+    // via ways into internal nodes.
+    OSMNodeID next_connection = via;
+    for (const auto &via_way : via_ways)
+    {
+        if (next_connection == via_way.first_segment_source_id())
+        {
+            std::transform(std::next(via_way.node_ids.begin()),
+                           via_way.node_ids.end(),
+                           std::back_inserter(way_path.via),
+                           to_internal_node);
+            next_connection = via_way.last_segment_target_id();
+        }
+        else if (next_connection == via_way.last_segment_target_id())
+        {
+            std::transform(std::next(via_way.node_ids.rbegin()),
+                           via_way.node_ids.rend(),
+                           std::back_inserter(way_path.via),
+                           to_internal_node);
+            next_connection = via_way.first_segment_source_id();
+        }
+        else
+        {
+            osrm::util::Log(logDEBUG)
+                << turn_relation_type << " has unconnected via way: " << via_way.way_id
+                << " to node " << next_connection;
+            return oe::ViaWayPath{SPECIAL_NODEID, {}, SPECIAL_NODEID};
+        }
+    }
+
+    // Add the final to node after the via-to intersection.
+    if (next_connection == to_way.first_segment_source_id())
+    {
+        way_path.to = to_internal_node(to_way.first_segment_target_id());
+    }
+    else if (next_connection == to_way.last_segment_target_id())
+    {
+        way_path.to = to_internal_node(to_way.last_segment_source_id());
+    }
+    else
+    {
+        osrm::util::Log(logDEBUG) << turn_relation_type
+                                  << " has unconnected via and to ways: " << via_ways.back().way_id
+                                  << ", " << to_way.way_id;
+        return oe::ViaWayPath{SPECIAL_NODEID, {}, SPECIAL_NODEID};
+    }
+    return way_path;
+}
+
+// Check if we were able to resolve all the involved OSM elements before translating to an
+// internal via-way turn path
+oe::ViaWayPath
+get_via_way_path_from_OSM_ids(const std::string &turn_relation_type,
+                              const std::unordered_map<OSMWayID, oe::NodesOfWay> &referenced_ways,
+                              const OSMWayID from_id,
+                              const OSMWayID to_id,
+                              const std::vector<OSMWayID> &via_ids,
+                              const std::function<NodeID(OSMNodeID)> &to_internal_node)
+{
+    auto const from_way_itr = referenced_ways.find(from_id);
+    if (from_way_itr->second.way_id != from_id)
+    {
+        osrm::util::Log(logDEBUG) << turn_relation_type
+                                  << " references invalid from way: " << from_id;
+        return oe::ViaWayPath{SPECIAL_NODEID, {}, SPECIAL_NODEID};
+    }
+
+    std::vector<oe::NodesOfWay> via_ways;
+    for (const auto &via_id : via_ids)
+    {
+        auto const via_segment_itr = referenced_ways.find(via_id);
+        if (via_segment_itr->second.way_id != via_id)
+        {
+            osrm::util::Log(logDEBUG)
+                << turn_relation_type << " references invalid via way: " << via_id;
+            return oe::ViaWayPath{SPECIAL_NODEID, {}, SPECIAL_NODEID};
+        }
+        via_ways.push_back(via_segment_itr->second);
+    }
+
+    auto const to_way_itr = referenced_ways.find(to_id);
+    if (to_way_itr->second.way_id != to_id)
+    {
+        osrm::util::Log(logDEBUG) << turn_relation_type << " references invalid to way: " << to_id;
+        return oe::ViaWayPath{SPECIAL_NODEID, {}, SPECIAL_NODEID};
+    }
+
+    return find_via_way_path(
+        turn_relation_type, from_way_itr->second, via_ways, to_way_itr->second, to_internal_node);
+}
+
+// Check if we were able to resolve all the involved OSM elements before translating to an
+// internal via-node turn path
+oe::ViaNodePath
+get_via_node_path_from_OSM_ids(const std::string &turn_relation_type,
+                               const std::unordered_map<OSMWayID, oe::NodesOfWay> &referenced_ways,
+                               const OSMWayID from_id,
+                               const OSMWayID to_id,
+                               const OSMNodeID via_node,
+                               const std::function<NodeID(OSMNodeID)> &to_internal_node)
+{
+
+    auto const from_segment_itr = referenced_ways.find(from_id);
+
+    if (from_segment_itr->second.way_id != from_id)
+    {
+        osrm::util::Log(logDEBUG) << turn_relation_type << " references invalid way: " << from_id;
+        return oe::ViaNodePath{SPECIAL_NODEID, SPECIAL_NODEID, SPECIAL_NODEID};
+    }
+
+    auto const to_segment_itr = referenced_ways.find(to_id);
+    if (to_segment_itr->second.way_id != to_id)
+    {
+        osrm::util::Log(logDEBUG) << turn_relation_type << " references invalid way: " << to_id;
+        return oe::ViaNodePath{SPECIAL_NODEID, SPECIAL_NODEID, SPECIAL_NODEID};
+    }
+
+    return find_via_node_path(turn_relation_type,
+                              from_segment_itr->second,
+                              to_segment_itr->second,
+                              via_node,
+                              to_internal_node);
+}
+
 } // namespace
 
-namespace osrm
-{
-namespace extractor
+namespace osrm::extractor
 {
 
 ExtractionContainers::ExtractionContainers()
@@ -175,30 +395,26 @@ ExtractionContainers::ExtractionContainers()
 
 /**
  * Processes the collected data and serializes it.
- * At this point nodes are still referenced by their OSM id.
  *
- * - map start-end nodes of ways to ways used in restrictions to compute compressed
- *   trippe representation
- * - filter nodes list to nodes that are referenced by ways
- * - merge edges with nodes to include location of start/end points and serialize
+ * In this function the nodes will eventually be converted from their 64bit OSM id to the
+ * internal 32bit OSRM id.
+ *
+ * - Identify nodes of ways used in restrictions and maneuver overrides
+ * - Filter nodes list to nodes that are referenced by ways
+ * - Prepare edges and compute routing properties
+ * - Prepare and validate restrictions and maneuver overrides
  *
  */
 void ExtractionContainers::PrepareData(ScriptingEnvironment &scripting_environment,
-                                       const std::string &osrm_path,
                                        const std::string &name_file_name)
 {
-    storage::tar::FileWriter writer(osrm_path, storage::tar::FileWriter::GenerateFingerprint);
-
     const auto restriction_ways = IdentifyRestrictionWays();
     const auto maneuver_override_ways = IdentifyManeuverOverrideWays();
+    scripting_environment.m_obstacle_map.preProcess(used_node_id_list, way_node_id_offsets);
 
     PrepareNodes();
-    WriteNodes(writer);
     PrepareEdges(scripting_environment);
-    all_nodes_list.clear(); // free all_nodes_list before allocation of normal_edges
-    all_nodes_list.shrink_to_fit();
-    WriteEdges(writer);
-    WriteMetadata(writer);
+    scripting_environment.m_obstacle_map.fixupNodes(used_node_id_list);
 
     PrepareManeuverOverrides(maneuver_override_ways);
     PrepareRestrictions(restriction_ways);
@@ -244,10 +460,10 @@ void ExtractionContainers::PrepareNodes()
         util::UnbufferedLog log;
         log << "Sorting all nodes         ... " << std::flush;
         TIMER_START(sorting_nodes);
-        tbb::parallel_sort(
-            all_nodes_list.begin(), all_nodes_list.end(), [](const auto &left, const auto &right) {
-                return left.node_id < right.node_id;
-            });
+        tbb::parallel_sort(all_nodes_list.begin(),
+                           all_nodes_list.end(),
+                           [](const auto &left, const auto &right)
+                           { return left.node_id < right.node_id; });
         TIMER_STOP(sorting_nodes);
         log << "ok, after " << TIMER_SEC(sorting_nodes) << "s";
     }
@@ -276,7 +492,7 @@ void ExtractionContainers::PrepareNodes()
                 continue;
             }
             BOOST_ASSERT(node_iter->node_id == *ref_iter);
-            *used_nodes_iter = std::move(*ref_iter);
+            *used_nodes_iter = *ref_iter;
             used_nodes_iter++;
             node_iter++;
             ref_iter++;
@@ -294,6 +510,44 @@ void ExtractionContainers::PrepareNodes()
         TIMER_STOP(id_map);
         log << "ok, after " << TIMER_SEC(id_map) << "s";
     }
+    {
+        util::UnbufferedLog log;
+        log << "Confirming/Writing used nodes     ... ";
+        TIMER_START(write_nodes);
+        // identify all used nodes by a merging step of two sorted lists
+        auto node_iterator = all_nodes_list.begin();
+        auto node_id_iterator = used_node_id_list.begin();
+        const auto all_nodes_list_end = all_nodes_list.end();
+
+        for (const auto index : util::irange<NodeID>(0, used_node_id_list.size()))
+        {
+            boost::ignore_unused(index);
+            BOOST_ASSERT(node_id_iterator != used_node_id_list.end());
+            BOOST_ASSERT(node_iterator != all_nodes_list_end);
+            BOOST_ASSERT(*node_id_iterator >= node_iterator->node_id);
+            while (*node_id_iterator > node_iterator->node_id &&
+                   node_iterator != all_nodes_list_end)
+            {
+                ++node_iterator;
+            }
+            if (node_iterator == all_nodes_list_end || *node_id_iterator < node_iterator->node_id)
+            {
+                throw util::exception(
+                    "Invalid OSM data: Referenced non-existing node with ID " +
+                    std::to_string(static_cast<std::uint64_t>(*node_id_iterator)));
+            }
+            BOOST_ASSERT(*node_id_iterator == node_iterator->node_id);
+
+            ++node_id_iterator;
+
+            used_nodes.emplace_back(*node_iterator++);
+        }
+
+        TIMER_STOP(write_nodes);
+        log << "ok, after " << TIMER_SEC(write_nodes) << "s";
+    }
+
+    util::Log() << "Processed " << max_internal_node_id << " nodes";
 }
 
 void ExtractionContainers::PrepareEdges(ScriptingEnvironment &scripting_environment)
@@ -359,7 +613,8 @@ void ExtractionContainers::PrepareEdges(ScriptingEnvironment &scripting_environm
 
         // Remove all remaining edges. They are invalid because there are no corresponding nodes for
         // them. This happens when using osmosis with bbox or polygon to extract smaller areas.
-        auto markSourcesInvalid = [](InternalExtractorEdge &edge) {
+        auto markSourcesInvalid = [](InternalExtractorEdge &edge)
+        {
             util::Log(logDEBUG) << "Found invalid node reference " << edge.result.source;
             edge.result.source = SPECIAL_NODEID;
             edge.result.osm_source_id = SPECIAL_OSM_NODEID;
@@ -434,15 +689,22 @@ void ExtractionContainers::PrepareEdges(ScriptingEnvironment &scripting_environm
             const auto duration = edge_iterator->duration_data(distance);
 
             const auto accurate_distance =
-                util::coordinate_calculation::fccApproximateDistance(source_coord, target_coord);
+                util::coordinate_calculation::greatCircleDistance(source_coord, target_coord);
 
-            ExtractionSegment segment(source_coord, target_coord, distance, weight, duration);
+            ExtractionSegment segment(source_coord,
+                                      target_coord,
+                                      distance,
+                                      weight,
+                                      duration,
+                                      edge_iterator->result.flags);
             scripting_environment.ProcessSegment(segment);
 
             auto &edge = edge_iterator->result;
-            edge.weight = std::max<EdgeWeight>(1, std::round(segment.weight * weight_multiplier));
-            edge.duration = std::max<EdgeWeight>(1, std::round(segment.duration * 10.));
-            edge.distance = accurate_distance;
+            edge.weight = std::max<EdgeWeight>(
+                {1}, to_alias<EdgeWeight>(std::round(segment.weight * weight_multiplier)));
+            edge.duration = std::max<EdgeDuration>(
+                {1}, to_alias<EdgeDuration>(std::round(segment.duration * 10.)));
+            edge.distance = to_alias<EdgeDistance>(accurate_distance);
 
             // assign new node id
             const auto node_id = mapExternalToInternalNodeID(
@@ -466,7 +728,8 @@ void ExtractionContainers::PrepareEdges(ScriptingEnvironment &scripting_environm
 
         // Remove all remaining edges. They are invalid because there are no corresponding nodes for
         // them. This happens when using osmosis with bbox or polygon to extract smaller areas.
-        auto markTargetsInvalid = [](InternalExtractorEdge &edge) {
+        auto markTargetsInvalid = [](InternalExtractorEdge &edge)
+        {
             util::Log(logDEBUG) << "Found invalid node reference " << edge.result.target;
             edge.result.target = SPECIAL_NODEID;
         };
@@ -507,10 +770,8 @@ void ExtractionContainers::PrepareEdges(ScriptingEnvironment &scripting_environm
         NodeID source = all_edges_list[i].result.source;
         NodeID target = all_edges_list[i].result.target;
 
-        auto min_forward = std::make_pair(std::numeric_limits<EdgeWeight>::max(),
-                                          std::numeric_limits<EdgeWeight>::max());
-        auto min_backward = std::make_pair(std::numeric_limits<EdgeWeight>::max(),
-                                           std::numeric_limits<EdgeWeight>::max());
+        auto min_forward = std::make_pair(MAXIMAL_EDGE_WEIGHT, MAXIMAL_EDGE_DURATION);
+        auto min_backward = std::make_pair(MAXIMAL_EDGE_WEIGHT, MAXIMAL_EDGE_DURATION);
         std::size_t min_forward_idx = std::numeric_limits<std::size_t>::max();
         std::size_t min_backward_idx = std::numeric_limits<std::size_t>::max();
 
@@ -579,12 +840,11 @@ void ExtractionContainers::PrepareEdges(ScriptingEnvironment &scripting_environm
             all_edges_list[j].result.target = SPECIAL_NODEID;
         }
     }
-}
 
-void ExtractionContainers::WriteEdges(storage::tar::FileWriter &writer) const
-{
-    std::vector<NodeBasedEdge> normal_edges;
-    normal_edges.reserve(all_edges_list.size());
+    all_nodes_list.clear(); // free all_nodes_list before allocation of used_edges
+    all_nodes_list.shrink_to_fit();
+
+    used_edges.reserve(all_edges_list.size());
     {
         util::UnbufferedLog log;
         log << "Writing used edges       ... " << std::flush;
@@ -600,115 +860,18 @@ void ExtractionContainers::WriteEdges(storage::tar::FileWriter &writer) const
 
             // IMPORTANT: here, we're using slicing to only write the data from the base
             // class of NodeBasedEdgeWithOSM
-            normal_edges.push_back(edge.result);
+            used_edges.push_back(edge.result);
         }
 
-        if (normal_edges.size() > std::numeric_limits<uint32_t>::max())
+        if (used_edges.size() > std::numeric_limits<uint32_t>::max())
         {
             throw util::exception("There are too many edges, OSRM only supports 2^32" + SOURCE_REF);
         }
 
-        storage::serialization::write(writer, "/extractor/edges", normal_edges);
-
         TIMER_STOP(write_edges);
         log << "ok, after " << TIMER_SEC(write_edges) << "s";
-        log << " -- Processed " << normal_edges.size() << " edges";
+        log << " -- Processed " << used_edges.size() << " edges";
     }
-}
-
-void ExtractionContainers::WriteMetadata(storage::tar::FileWriter &writer) const
-{
-    util::UnbufferedLog log;
-    log << "Writing way meta-data     ... " << std::flush;
-    TIMER_START(write_meta_data);
-
-    storage::serialization::write(writer, "/extractor/annotations", all_edges_annotation_data_list);
-
-    TIMER_STOP(write_meta_data);
-    log << "ok, after " << TIMER_SEC(write_meta_data) << "s";
-    log << " -- Metadata contains << " << all_edges_annotation_data_list.size() << " entries.";
-}
-
-void ExtractionContainers::WriteNodes(storage::tar::FileWriter &writer) const
-{
-    {
-        util::UnbufferedLog log;
-        log << "Confirming/Writing used nodes     ... ";
-        TIMER_START(write_nodes);
-        // identify all used nodes by a merging step of two sorted lists
-        auto node_iterator = all_nodes_list.begin();
-        auto node_id_iterator = used_node_id_list.begin();
-        const auto all_nodes_list_end = all_nodes_list.end();
-
-        const std::function<QueryNode()> encode_function = [&]() -> QueryNode {
-            BOOST_ASSERT(node_id_iterator != used_node_id_list.end());
-            BOOST_ASSERT(node_iterator != all_nodes_list_end);
-            BOOST_ASSERT(*node_id_iterator >= node_iterator->node_id);
-            while (*node_id_iterator > node_iterator->node_id &&
-                   node_iterator != all_nodes_list_end)
-            {
-                ++node_iterator;
-            }
-            if (node_iterator == all_nodes_list_end || *node_id_iterator < node_iterator->node_id)
-            {
-                throw util::exception(
-                    "Invalid OSM data: Referenced non-existing node with ID " +
-                    std::to_string(static_cast<std::uint64_t>(*node_id_iterator)));
-            }
-            BOOST_ASSERT(*node_id_iterator == node_iterator->node_id);
-
-            ++node_id_iterator;
-            return *node_iterator++;
-        };
-
-        writer.WriteElementCount64("/extractor/nodes", used_node_id_list.size());
-        writer.WriteStreaming<QueryNode>(
-            "/extractor/nodes",
-            boost::make_function_input_iterator(encode_function, boost::infinite()),
-            used_node_id_list.size());
-
-        TIMER_STOP(write_nodes);
-        log << "ok, after " << TIMER_SEC(write_nodes) << "s";
-    }
-
-    {
-        util::UnbufferedLog log;
-        log << "Writing barrier nodes     ... ";
-        TIMER_START(write_nodes);
-        std::vector<NodeID> internal_barrier_nodes;
-        for (const auto osm_id : barrier_nodes)
-        {
-            const auto node_id = mapExternalToInternalNodeID(
-                used_node_id_list.begin(), used_node_id_list.end(), osm_id);
-            if (node_id != SPECIAL_NODEID)
-            {
-                internal_barrier_nodes.push_back(node_id);
-            }
-        }
-        storage::serialization::write(writer, "/extractor/barriers", internal_barrier_nodes);
-        log << "ok, after " << TIMER_SEC(write_nodes) << "s";
-    }
-
-    {
-        util::UnbufferedLog log;
-        log << "Writing traffic light nodes     ... ";
-        TIMER_START(write_nodes);
-        std::vector<NodeID> internal_traffic_signals;
-        for (const auto osm_id : traffic_signals)
-        {
-            const auto node_id = mapExternalToInternalNodeID(
-                used_node_id_list.begin(), used_node_id_list.end(), osm_id);
-            if (node_id != SPECIAL_NODEID)
-            {
-                internal_traffic_signals.push_back(node_id);
-            }
-        }
-        storage::serialization::write(
-            writer, "/extractor/traffic_lights", internal_traffic_signals);
-        log << "ok, after " << TIMER_SEC(write_nodes) << "s";
-    }
-
-    util::Log() << "Processed " << max_internal_node_id << " nodes";
 }
 
 ExtractionContainers::ReferencedWays ExtractionContainers::IdentifyManeuverOverrideWays()
@@ -721,13 +884,20 @@ ExtractionContainers::ReferencedWays ExtractionContainers::IdentifyManeuverOverr
         << " maneuver overrides...";
     TIMER_START(identify_maneuver_override_ways);
 
-    const auto mark_ids = [&](auto const &external_maneuver_override) {
+    const auto mark_ids = [&](auto const &external_maneuver_override)
+    {
         NodesOfWay dummy_segment{MAX_OSM_WAYID, {MAX_OSM_NODEID, MAX_OSM_NODEID}};
-        std::for_each(external_maneuver_override.via_ways.begin(),
-                      external_maneuver_override.via_ways.end(),
-                      [&maneuver_override_ways, dummy_segment](const auto &element) {
-                          maneuver_override_ways[element] = dummy_segment;
-                      });
+        const auto &turn_path = external_maneuver_override.turn_path;
+        maneuver_override_ways[turn_path.From()] = dummy_segment;
+        maneuver_override_ways[turn_path.To()] = dummy_segment;
+        if (external_maneuver_override.turn_path.Type() == TurnPathType::VIA_WAY_TURN_PATH)
+        {
+            const auto &way = turn_path.AsViaWayPath();
+            for (const auto &via : way.via)
+            {
+                maneuver_override_ways[via] = dummy_segment;
+            }
+        }
     };
 
     // First, make an empty hashtable keyed by the ways referenced
@@ -735,7 +905,8 @@ ExtractionContainers::ReferencedWays ExtractionContainers::IdentifyManeuverOverr
     std::for_each(
         external_maneuver_overrides_list.begin(), external_maneuver_overrides_list.end(), mark_ids);
 
-    const auto set_ids = [&](size_t way_list_idx, auto const &way_id) {
+    const auto set_ids = [&](size_t way_list_idx, auto const &way_id)
+    {
         auto itr = maneuver_override_ways.find(way_id);
         if (itr != maneuver_override_ways.end())
         {
@@ -757,7 +928,8 @@ ExtractionContainers::ReferencedWays ExtractionContainers::IdentifyManeuverOverr
 
 void ExtractionContainers::PrepareManeuverOverrides(const ReferencedWays &maneuver_override_ways)
 {
-    auto const osm_node_to_internal_nbn = [&](auto const osm_node) {
+    auto const osm_node_to_internal_nbn = [&](auto const osm_node)
+    {
         auto internal = mapExternalToInternalNodeID(
             used_node_id_list.begin(), used_node_id_list.end(), osm_node);
         if (internal == SPECIAL_NODEID)
@@ -767,38 +939,9 @@ void ExtractionContainers::PrepareManeuverOverrides(const ReferencedWays &maneuv
         return internal;
     };
 
-    auto const get_turn_from_way_pair = [&](const OSMWayID &from_id, const OSMWayID &to_id) {
-        auto const from_segment_itr = maneuver_override_ways.find(from_id);
-        if (from_segment_itr->second.way_id != from_id)
-        {
-            util::Log(logDEBUG) << "Override references invalid way: " << from_id;
-            return NodeBasedTurn{SPECIAL_NODEID, SPECIAL_NODEID, SPECIAL_NODEID};
-        }
-
-        auto const to_segment_itr = maneuver_override_ways.find(to_id);
-        if (to_segment_itr->second.way_id != to_id)
-        {
-            util::Log(logDEBUG) << "Override references invalid way: " << to_id;
-            return NodeBasedTurn{SPECIAL_NODEID, SPECIAL_NODEID, SPECIAL_NODEID};
-        }
-
-        OSMNodeID from, via, to;
-        std::tie(from, via, to) =
-            find_turn_nodes(from_segment_itr->second, to_segment_itr->second, SPECIAL_OSM_NODEID);
-        if (via == SPECIAL_OSM_NODEID)
-        {
-            // unconnected
-            util::Log(logDEBUG) << "Maneuver override ways " << from_segment_itr->second.way_id
-                                << " and " << to_segment_itr->second.way_id << " are not connected";
-            return NodeBasedTurn{SPECIAL_NODEID, SPECIAL_NODEID, SPECIAL_NODEID};
-        }
-        return NodeBasedTurn{osm_node_to_internal_nbn(from),
-                             osm_node_to_internal_nbn(via),
-                             osm_node_to_internal_nbn(to)};
-    };
-
-    const auto strings_to_turn_type_and_direction = [](const std::string &turn_string,
-                                                       const std::string &direction_string) {
+    const auto strings_to_turn_type_and_direction =
+        [](const std::string &turn_string, const std::string &direction_string)
+    {
         auto result = std::make_pair(guidance::TurnType::MaxTurnType,
                                      guidance::DirectionModifier::MaxDirectionModifier);
 
@@ -862,52 +1005,46 @@ void ExtractionContainers::PrepareManeuverOverrides(const ReferencedWays &maneuv
     // Returns true on successful transformation, false in case of invalid references.
     // Later, the UnresolvedManeuverOverride will be converted into a final ManeuverOverride
     // once the edge-based-node IDs are generated by the edge-based-graph-factory
-    const auto transform = [&](const auto &external, auto &internal) {
-        // Create a stub override
-        auto maneuver_override =
-            UnresolvedManeuverOverride{{},
-                                       osm_node_to_internal_nbn(external.via_node),
-                                       guidance::TurnType::Invalid,
-                                       guidance::DirectionModifier::MaxDirectionModifier};
-
-        // Convert Way IDs into node-based-node IDs
-        // We iterate from back to front here because the first node in the node_sequence
-        // must eventually be a source node, but all the others must be targets.
-        // the get_internal_pairs_from_ways returns (source,target), so if we
-        // iterate backwards, we will end up with source,target,target,target,target
-        // in a sequence, which is what we want
-        for (auto i = 0ul; i < external.via_ways.size() - 1; ++i)
+    const auto transform = [&](const auto &external_type, auto &internal_type)
+    {
+        if (external_type.turn_path.Type() == TurnPathType::VIA_WAY_TURN_PATH)
         {
-            // returns the two far ends of the referenced ways
-            auto turn = get_turn_from_way_pair(external.via_ways[i], external.via_ways[i + 1]);
-
-            maneuver_override.turn_sequence.push_back(turn);
+            auto const &external = external_type.turn_path.AsViaWayPath();
+            internal_type.turn_path.node_or_way =
+                get_via_way_path_from_OSM_ids(internal_type.Name(),
+                                              maneuver_override_ways,
+                                              external.from,
+                                              external.to,
+                                              external.via,
+                                              osm_node_to_internal_nbn);
+        }
+        else
+        {
+            BOOST_ASSERT(external_type.turn_path.Type() == TurnPathType::VIA_NODE_TURN_PATH);
+            auto const &external = external_type.turn_path.AsViaNodePath();
+            internal_type.turn_path.node_or_way =
+                get_via_node_path_from_OSM_ids(internal_type.Name(),
+                                               maneuver_override_ways,
+                                               external.from,
+                                               external.to,
+                                               external.via,
+                                               osm_node_to_internal_nbn);
         }
 
-        // check if we were able to resolve all the involved ways
-        // auto maneuver_override =
-        //    get_maneuver_override_from_OSM_ids(external.from, external.to,
-        //    external.via_node);
+        internal_type.instruction_node = osm_node_to_internal_nbn(external_type.via_node),
+        std::tie(internal_type.override_type, internal_type.direction) =
+            strings_to_turn_type_and_direction(external_type.maneuver, external_type.direction);
 
-        std::tie(maneuver_override.override_type, maneuver_override.direction) =
-            strings_to_turn_type_and_direction(external.maneuver, external.direction);
-
-        if (!maneuver_override.Valid())
-        {
-            util::Log(logDEBUG) << "Override is invalid";
-            return false;
-        }
-
-        internal = std::move(maneuver_override);
-        return true;
+        return internal_type.Valid();
     };
 
     const auto transform_into_internal_types =
-        [&](const InputManeuverOverride &external_maneuver_override) {
-            UnresolvedManeuverOverride internal_maneuver_override;
-            if (transform(external_maneuver_override, internal_maneuver_override))
-                internal_maneuver_overrides.push_back(std::move(internal_maneuver_override));
-        };
+        [&](const InputManeuverOverride &external_maneuver_override)
+    {
+        UnresolvedManeuverOverride internal_maneuver_override;
+        if (transform(external_maneuver_override, internal_maneuver_override))
+            internal_maneuver_overrides.push_back(std::move(internal_maneuver_override));
+    };
 
     // Transforming the overrides into the dedicated internal types
     {
@@ -925,7 +1062,7 @@ void ExtractionContainers::PrepareManeuverOverrides(const ReferencedWays &maneuv
 
 ExtractionContainers::ReferencedWays ExtractionContainers::IdentifyRestrictionWays()
 {
-    // Contains the nodes of each way that is part of an restriction
+    // Contains the nodes of each way that is part of a restriction
     ReferencedWays restriction_ways;
 
     // Prepare for extracting nodes for all restrictions
@@ -935,31 +1072,27 @@ ExtractionContainers::ReferencedWays ExtractionContainers::IdentifyRestrictionWa
 
     // Enter invalid IDs into the map to indicate that we want to find out about
     // nodes of these ways.
-    const auto mark_ids = [&](auto const &turn_restriction) {
+    const auto mark_ids = [&](auto const &turn_restriction)
+    {
         NodesOfWay dummy_segment{MAX_OSM_WAYID, {MAX_OSM_NODEID, MAX_OSM_NODEID}};
-        if (turn_restriction.Type() == RestrictionType::WAY_RESTRICTION)
+        const auto &turn_path = turn_restriction.turn_path;
+        restriction_ways[turn_path.From()] = dummy_segment;
+        restriction_ways[turn_path.To()] = dummy_segment;
+        if (turn_path.Type() == TurnPathType::VIA_WAY_TURN_PATH)
         {
-            const auto &way = turn_restriction.AsWayRestriction();
-            restriction_ways[way.from] = dummy_segment;
-            restriction_ways[way.to] = dummy_segment;
-            for (const auto &v : way.via)
+            const auto &way = turn_path.AsViaWayPath();
+            for (const auto &via : way.via)
             {
-                restriction_ways[v] = dummy_segment;
+                restriction_ways[via] = dummy_segment;
             }
-        }
-        else
-        {
-            BOOST_ASSERT(turn_restriction.Type() == RestrictionType::NODE_RESTRICTION);
-            const auto &node = turn_restriction.AsNodeRestriction();
-            restriction_ways[node.from] = dummy_segment;
-            restriction_ways[node.to] = dummy_segment;
         }
     };
 
     std::for_each(restrictions_list.begin(), restrictions_list.end(), mark_ids);
 
     // Update the values for all ways already sporting SPECIAL_NODEID
-    const auto set_ids = [&](const size_t way_list_idx, auto const &way_id) {
+    const auto set_ids = [&](const size_t way_list_idx, auto const &way_id)
+    {
         auto itr = restriction_ways.find(way_id);
         if (itr != restriction_ways.end())
         {
@@ -982,7 +1115,8 @@ ExtractionContainers::ReferencedWays ExtractionContainers::IdentifyRestrictionWa
 void ExtractionContainers::PrepareRestrictions(const ReferencedWays &restriction_ways)
 {
 
-    auto const to_internal = [&](auto const osm_node) {
+    auto const to_internal = [&](auto const osm_node)
+    {
         auto internal = mapExternalToInternalNodeID(
             used_node_id_list.begin(), used_node_id_list.end(), osm_node);
         if (internal == SPECIAL_NODEID)
@@ -992,234 +1126,43 @@ void ExtractionContainers::PrepareRestrictions(const ReferencedWays &restriction
         return internal;
     };
 
-    // Way restrictions are comprised of:
-    // 1. The segment in the from way that intersects with the via path
-    // 2. All segments that make up the via path
-    // 3. The segment in the to way that intersects with the via path.
-    //
-    // from: [a, b, c, d, e]
-    // via: [[f, g, h, i, j], [k, l], [m, n, o]]
-    // to: [p, q, r, s]
-    //
-    // First establish the orientation of the from/via intersection by finding which end
-    // nodes both ways share. From this we can select the from segment.
-    //
-    // intersect | from segment | next_connection
-    //    a=f    |      b,a     |        f
-    //    a=j    |      b,a     |        j
-    //    e=f    |      e,d     |        f
-    //    e=j    |      e,d     |        j
-    //
-    // Use the next connection to inform the orientation of the first via
-    // way and the intersection between first and second via ways.
-    //
-    // next_connection | intersect | via result  | next_next_connection
-    //       f         |    j=k    | [f,g,h,i,j] |      k
-    //       f         |    j=l    | [f,g,h,i,j] |      l
-    //       j         |    f=k    | [j,i,h,g,f] |      k
-    //       j         |    f=l    | [j,i,h,g,f] |      l
-    //
-    // This is continued for the remaining via ways, appending to the via result
-    //
-    // The final via/to intersection also uses the next_connection information in a similar fashion.
-    //
-    // next_connection | intersect | to_segment
-    //       m         |    o=p    |    p,q
-    //       m         |    o=s    |    s,r
-    //       o         |    m=p    |    p,q
-    //       o         |    m=s    |    s,r
-    //
-    // The final result is a list of nodes that represent a valid from->via->to path through the
-    // ways.
-    //
-    // E.g. if intersection nodes are a=j, f=l, k=o, m=s
-    // the result will be {e [d,c,b,a,i,h,g,f,k,n,m] r}
-    auto const find_way_restriction = [&](const NodesOfWay &from_way,
-                                          const std::vector<NodesOfWay> &via_ways,
-                                          const NodesOfWay &to_way) {
-        BOOST_ASSERT(!via_ways.empty());
-
-        WayRestriction restriction;
-
-        // Find the orientation of the connected ways starting with the from-via intersection.
-        OSMNodeID from, via;
-        std::tie(from, via, std::ignore) =
-            find_turn_nodes(from_way, via_ways.front(), SPECIAL_OSM_NODEID);
-        if (via == SPECIAL_OSM_NODEID)
-        {
-            util::Log(logDEBUG) << "Restriction has unconnected from and via ways: "
-                                << from_way.way_id << ", " << via_ways.front().way_id;
-            return WayRestriction{SPECIAL_NODEID, {}, SPECIAL_NODEID};
-        }
-        restriction.from = to_internal(from);
-        restriction.via.push_back(to_internal(via));
-
-        // Use the connection node from the previous intersection to inform our conversion of
-        // via ways into internal nodes.
-        OSMNodeID next_connection = via;
-        for (const auto &via_way : via_ways)
-        {
-            if (next_connection == via_way.first_segment_source_id())
-            {
-                std::transform(std::next(via_way.node_ids.begin()),
-                               via_way.node_ids.end(),
-                               std::back_inserter(restriction.via),
-                               to_internal);
-                next_connection = via_way.last_segment_target_id();
-            }
-            else if (next_connection == via_way.last_segment_target_id())
-            {
-                std::transform(std::next(via_way.node_ids.rbegin()),
-                               via_way.node_ids.rend(),
-                               std::back_inserter(restriction.via),
-                               to_internal);
-                next_connection = via_way.first_segment_source_id();
-            }
-            else
-            {
-                util::Log(logDEBUG) << "Restriction has unconnected via way: " << via_way.way_id
-                                    << " to node " << next_connection;
-                return WayRestriction{SPECIAL_NODEID, {}, SPECIAL_NODEID};
-            }
-        }
-
-        // Add the final to node after the via-to intersection.
-        if (next_connection == to_way.first_segment_source_id())
-        {
-            restriction.to = to_internal(to_way.first_segment_target_id());
-        }
-        else if (next_connection == to_way.last_segment_target_id())
-        {
-            restriction.to = to_internal(to_way.last_segment_source_id());
-        }
-        else
-        {
-            util::Log(logDEBUG) << "Restriction has unconnected via and to ways: "
-                                << via_ways.back().way_id << ", " << to_way.way_id;
-            return WayRestriction{SPECIAL_NODEID, {}, SPECIAL_NODEID};
-        }
-        return restriction;
-    };
-
-    // Check if we were able to resolve all the involved OSM elements before translating to an
-    // internal restriction
-    auto const get_way_restriction_from_OSM_ids =
-        [&](auto const from_id, auto const to_id, const std::vector<OSMWayID> &via_ids) {
-            auto const from_way_itr = restriction_ways.find(from_id);
-            if (from_way_itr->second.way_id != from_id)
-            {
-                util::Log(logDEBUG) << "Restriction references invalid from way: " << from_id;
-                return WayRestriction{SPECIAL_NODEID, {}, SPECIAL_NODEID};
-            }
-
-            std::vector<NodesOfWay> via_ways;
-            for (const auto &via_id : via_ids)
-            {
-                auto const via_segment_itr = restriction_ways.find(via_id);
-                if (via_segment_itr->second.way_id != via_id)
-                {
-                    util::Log(logDEBUG) << "Restriction references invalid via way: " << via_id;
-                    return WayRestriction{SPECIAL_NODEID, {}, SPECIAL_NODEID};
-                }
-                via_ways.push_back(via_segment_itr->second);
-            }
-
-            auto const to_way_itr = restriction_ways.find(to_id);
-            if (to_way_itr->second.way_id != to_id)
-            {
-                util::Log(logDEBUG) << "Restriction references invalid to way: " << to_id;
-                return WayRestriction{SPECIAL_NODEID, {}, SPECIAL_NODEID};
-            }
-
-            return find_way_restriction(from_way_itr->second, via_ways, to_way_itr->second);
-        };
-
-    // Node restrictions are described as a restriction between the two segments closest
-    // to the shared via-node on the from and to ways.
-    // from: [a, b, c, d, e]
-    // to: [f, g, h, i, j]
-    //
-    // The via node establishes the orientation of the from/to intersection when choosing the
-    // segments.
-    //   via    |  node restriction
-    //   a=f    |     b,a,g
-    //   a=j    |     b,a,i
-    //   e=f    |     d,e,g
-    //   e=j    |     d,e,i
-    auto const find_node_restriction =
-        [&](auto const &from_segment, auto const &to_segment, auto const via_node) {
-            OSMNodeID from, via, to;
-            std::tie(from, via, to) = find_turn_nodes(from_segment, to_segment, via_node);
-            if (via == SPECIAL_OSM_NODEID)
-            {
-                // unconnected
-                util::Log(logDEBUG)
-                    << "Restriction references unconnected way: " << from_segment.way_id;
-                return NodeRestriction{SPECIAL_NODEID, SPECIAL_NODEID, SPECIAL_NODEID};
-            }
-            return NodeRestriction{to_internal(from), to_internal(via), to_internal(to)};
-        };
-
-    // Check if we were able to resolve all the involved OSM elements before translating to an
-    // internal restriction
-    auto const get_node_restriction_from_OSM_ids = [&](auto const from_id,
-                                                       auto const to_id,
-                                                       const OSMNodeID via_node) {
-        auto const from_segment_itr = restriction_ways.find(from_id);
-
-        if (from_segment_itr->second.way_id != from_id)
-        {
-            util::Log(logDEBUG) << "Restriction references invalid way: " << from_id;
-            return NodeRestriction{SPECIAL_NODEID, SPECIAL_NODEID, SPECIAL_NODEID};
-        }
-
-        auto const to_segment_itr = restriction_ways.find(to_id);
-        if (to_segment_itr->second.way_id != to_id)
-        {
-            util::Log(logDEBUG) << "Restriction references invalid way: " << to_id;
-            return NodeRestriction{SPECIAL_NODEID, SPECIAL_NODEID, SPECIAL_NODEID};
-        }
-
-        return find_node_restriction(from_segment_itr->second, to_segment_itr->second, via_node);
-    };
-
     // Transform an OSMRestriction (based on WayIDs) into an OSRM restriction (base on NodeIDs).
     // Returns true on successful transformation, false in case of invalid references.
-    const auto transform = [&](const auto &external_type, auto &internal_type) {
-        if (external_type.Type() == RestrictionType::WAY_RESTRICTION)
+    const auto transform = [&](const auto &external_type, auto &internal_type)
+    {
+        if (external_type.turn_path.Type() == TurnPathType::VIA_WAY_TURN_PATH)
         {
-            auto const &external = external_type.AsWayRestriction();
-            auto const restriction =
-                get_way_restriction_from_OSM_ids(external.from, external.to, external.via);
-
-            if (!restriction.Valid())
-                return false;
-
-            internal_type.node_or_way = restriction;
-            return true;
+            auto const &external = external_type.turn_path.AsViaWayPath();
+            internal_type.turn_path.node_or_way =
+                get_via_way_path_from_OSM_ids(internal_type.Name(),
+                                              restriction_ways,
+                                              external.from,
+                                              external.to,
+                                              external.via,
+                                              to_internal);
         }
         else
         {
-            BOOST_ASSERT(external_type.Type() == RestrictionType::NODE_RESTRICTION);
-            auto const &external = external_type.AsNodeRestriction();
-
-            auto restriction =
-                get_node_restriction_from_OSM_ids(external.from, external.to, external.via);
-
-            if (!restriction.Valid())
-                return false;
-
-            internal_type.node_or_way = restriction;
-            return true;
+            BOOST_ASSERT(external_type.turn_path.Type() == TurnPathType::VIA_NODE_TURN_PATH);
+            auto const &external = external_type.turn_path.AsViaNodePath();
+            internal_type.turn_path.node_or_way =
+                get_via_node_path_from_OSM_ids(internal_type.Name(),
+                                               restriction_ways,
+                                               external.from,
+                                               external.to,
+                                               external.via,
+                                               to_internal);
         }
+        internal_type.is_only = external_type.is_only;
+        internal_type.condition = std::move(external_type.condition);
+        return internal_type.Valid();
     };
 
-    const auto transform_into_internal_types = [&](InputTurnRestriction &external_restriction) {
+    const auto transform_into_internal_types = [&](InputTurnRestriction &external_restriction)
+    {
         TurnRestriction restriction;
         if (transform(external_restriction, restriction))
         {
-            restriction.is_only = external_restriction.is_only;
-            restriction.condition = std::move(external_restriction.condition);
             turn_restrictions.push_back(std::move(restriction));
         }
     };
@@ -1236,5 +1179,4 @@ void ExtractionContainers::PrepareRestrictions(const ReferencedWays &restriction
     }
 }
 
-} // namespace extractor
-} // namespace osrm
+} // namespace osrm::extractor

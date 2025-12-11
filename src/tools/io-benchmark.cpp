@@ -1,10 +1,11 @@
+#ifdef __FreeBSD__
+#pragma clang diagnostic ignored "-Wunreachable-code"
+#endif
+
 #include "util/exception.hpp"
 #include "util/exception_utils.hpp"
 #include "util/log.hpp"
 #include "util/timing_util.hpp"
-
-#include <boost/filesystem.hpp>
-#include <boost/filesystem/fstream.hpp>
 
 #include <cmath>
 #include <cstdio>
@@ -12,17 +13,19 @@
 #ifdef __linux__
 #include <malloc.h>
 #endif
+#ifdef __FreeBSD__
+#include <unistd.h>
+#endif
 
 #include <algorithm>
-#include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <numeric>
 #include <random>
 #include <vector>
 
-namespace osrm
-{
-namespace tools
+namespace osrm::tools
 {
 
 const unsigned NUMBER_OF_ELEMENTS = 268435456;
@@ -45,10 +48,9 @@ void runStatistics(std::vector<double> &timings_vector, Statistics &stats)
         timings_vector.begin(), timings_vector.end(), timings_vector.begin(), 0.0);
     stats.dev = std::sqrt(primary_sq_sum / timings_vector.size() - (stats.mean * stats.mean));
 }
-} // namespace tools
-} // namespace osrm
+} // namespace osrm::tools
 
-boost::filesystem::path test_path;
+std::filesystem::path test_path;
 
 int main(int argc, char *argv[])
 {
@@ -69,7 +71,7 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    test_path = boost::filesystem::path(argv[1]);
+    test_path = std::filesystem::path(argv[1]);
     test_path /= "osrm.tst";
     osrm::util::Log(logDEBUG) << "temporary file: " << test_path.string();
 
@@ -77,7 +79,7 @@ int main(int argc, char *argv[])
     if (2 == argc)
     {
         // create file to test
-        if (boost::filesystem::exists(test_path))
+        if (std::filesystem::exists(test_path))
         {
             throw osrm::util::exception("Data file already exists: " + test_path.string() +
                                         SOURCE_REF);
@@ -93,6 +95,14 @@ int main(int argc, char *argv[])
         write(fileno(fd), (char *)random_array, osrm::tools::NUMBER_OF_ELEMENTS * sizeof(unsigned));
         TIMER_STOP(write_1gb);
         fclose(fd);
+#endif
+#ifdef __FreeBSD__
+        int fd = open(test_path.string().c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_DIRECT, 0644);
+        fcntl(fd, F_RDAHEAD, 0);
+        TIMER_START(write_1gb);
+        write(fd, (char *)random_array, osrm::tools::NUMBER_OF_ELEMENTS * sizeof(unsigned));
+        TIMER_STOP(write_1gb);
+        close(fd);
 #endif
 #ifdef __linux__
         int file_desc =
@@ -123,7 +133,7 @@ int main(int argc, char *argv[])
     else
     {
         // Run Non-Cached I/O benchmarks
-        if (!boost::filesystem::exists(test_path))
+        if (!std::filesystem::exists(test_path))
         {
             throw osrm::util::exception("data file does not exist" + SOURCE_REF);
         }
@@ -177,7 +187,7 @@ int main(int argc, char *argv[])
 #ifdef __linux__
         lseek(file_desc, 0, SEEK_SET);
 #endif
-        // make 1000 random access, time each I/O seperately
+        // make 1000 random access, time each I/O separately
         unsigned number_of_blocks = (osrm::tools::NUMBER_OF_ELEMENTS * sizeof(unsigned) - 1) / 4096;
         std::random_device rd;
         std::default_random_engine e1(rd());
@@ -301,9 +311,9 @@ int main(int argc, char *argv[])
                           << "max: " << stats.max << "ms, "
                           << "dev: " << stats.dev << "ms";
 
-        if (boost::filesystem::exists(test_path))
+        if (std::filesystem::exists(test_path))
         {
-            boost::filesystem::remove(test_path);
+            std::filesystem::remove(test_path);
             osrm::util::Log(logDEBUG) << "removing temporary files";
         }
     }

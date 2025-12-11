@@ -14,9 +14,7 @@
 #include <numeric>
 #include <vector>
 
-namespace osrm
-{
-namespace contractor
+namespace osrm::contractor
 {
 
 struct ContractedEdgeContainer
@@ -63,7 +61,7 @@ struct ContractedEdgeContainer
     void Filter(const std::vector<bool> &filter, std::size_t index)
     {
         BOOST_ASSERT(index < sizeof(MergedFlags) * CHAR_BIT);
-        const MergedFlags flag = 1 << index;
+        const MergedFlags flag = MergedFlags{1} << index;
 
         for (auto edge_index : util::irange<std::size_t>(0, edges.size()))
         {
@@ -83,7 +81,7 @@ struct ContractedEdgeContainer
     {
         BOOST_ASSERT(index < sizeof(MergedFlags) * CHAR_BIT);
 
-        const MergedFlags flag = 1 << index++;
+        const MergedFlags flag = MergedFlags{1} << index++;
 
         auto edge_iter = edges.cbegin();
         auto edge_end = edges.cend();
@@ -91,37 +89,40 @@ struct ContractedEdgeContainer
 
         // Remove all edges that are contained in the old set of edges and set the appropriate flag.
         auto new_end =
-            std::remove_if(new_edges.begin(), new_edges.end(), [&](const QueryEdge &edge) {
-                // check if the new edge would be sorted before the currend old edge
-                // if so it is not contained yet in the set of old edges
-                if (edge_iter == edge_end || mergeCompare(edge, *edge_iter))
-                {
-                    return false;
-                }
+            std::remove_if(new_edges.begin(),
+                           new_edges.end(),
+                           [&](const QueryEdge &edge)
+                           {
+                               // check if the new edge would be sorted before the currend old edge
+                               // if so it is not contained yet in the set of old edges
+                               if (edge_iter == edge_end || mergeCompare(edge, *edge_iter))
+                               {
+                                   return false;
+                               }
 
-                // find the first old edge that is equal or greater then the new edge
-                while (edge_iter != edge_end && mergeCompare(*edge_iter, edge))
-                {
-                    BOOST_ASSERT(flags_iter != flags.end());
-                    edge_iter++;
-                    flags_iter++;
-                }
+                               // find the first old edge that is equal or greater then the new edge
+                               while (edge_iter != edge_end && mergeCompare(*edge_iter, edge))
+                               {
+                                   BOOST_ASSERT(flags_iter != flags.end());
+                                   edge_iter++;
+                                   flags_iter++;
+                               }
 
-                // all new edges will be sorted after the old edges
-                if (edge_iter == edge_end)
-                {
-                    return false;
-                }
+                               // all new edges will be sorted after the old edges
+                               if (edge_iter == edge_end)
+                               {
+                                   return false;
+                               }
 
-                BOOST_ASSERT(edge_iter != edge_end);
-                if (mergable(edge, *edge_iter))
-                {
-                    *flags_iter = *flags_iter | flag;
-                    return true;
-                }
-                BOOST_ASSERT(mergeCompare(edge, *edge_iter));
-                return false;
-            });
+                               BOOST_ASSERT(edge_iter != edge_end);
+                               if (mergable(edge, *edge_iter))
+                               {
+                                   *flags_iter = *flags_iter | flag;
+                                   return true;
+                               }
+                               BOOST_ASSERT(mergeCompare(edge, *edge_iter));
+                               return false;
+                           });
 
         // append new edges
         edges.insert(edges.end(), new_edges.begin(), new_end);
@@ -134,10 +135,10 @@ struct ContractedEdgeContainer
         // enforce sorting for next merge step
         std::vector<unsigned> ordering(edges_size);
         std::iota(ordering.begin(), ordering.end(), 0);
-        tbb::parallel_sort(
-            ordering.begin(), ordering.end(), [&](const auto lhs_idx, const auto rhs_idx) {
-                return mergeCompare(edges[lhs_idx], edges[rhs_idx]);
-            });
+        tbb::parallel_sort(ordering.begin(),
+                           ordering.end(),
+                           [&](const auto lhs_idx, const auto rhs_idx)
+                           { return mergeCompare(edges[lhs_idx], edges[rhs_idx]); });
         auto permutation = util::orderingToPermutation(ordering);
 
         util::inplacePermutation(edges.begin(), edges.end(), permutation);
@@ -150,7 +151,7 @@ struct ContractedEdgeContainer
         std::vector<std::vector<bool>> filters(index);
         for (const auto flag_index : util::irange<std::size_t>(0, index))
         {
-            MergedFlags mask = 1 << flag_index;
+            MergedFlags mask = MergedFlags{1} << flag_index;
             for (const auto flag : flags)
             {
                 filters[flag_index].push_back(flag & mask);
@@ -164,7 +165,6 @@ struct ContractedEdgeContainer
     std::vector<MergedFlags> flags;
     std::vector<QueryEdge> edges;
 };
-} // namespace contractor
-} // namespace osrm
+} // namespace osrm::contractor
 
 #endif

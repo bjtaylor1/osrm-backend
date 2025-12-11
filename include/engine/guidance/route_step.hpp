@@ -14,13 +14,9 @@
 #include <string>
 #include <vector>
 
-#include <boost/range/iterator_range.hpp>
+#include <ranges>
 
-namespace osrm
-{
-namespace engine
-{
-namespace guidance
+namespace osrm::engine::guidance
 {
 // Given the following turn from a,b to b,c over b:
 //  a --> b --> c
@@ -85,7 +81,7 @@ struct RouteStep
     void Invalidate();
 
     // Elongate by another step in front
-    RouteStep &AddInFront(const RouteStep &preceeding_step);
+    RouteStep &AddInFront(const RouteStep &preceding_step);
 
     // Elongate by another step in back
     RouteStep &ElongateBy(const RouteStep &following_step);
@@ -136,18 +132,18 @@ inline void RouteStep::Invalidate()
 }
 
 // Elongate by another step in front
-inline RouteStep &RouteStep::AddInFront(const RouteStep &preceeding_step)
+inline RouteStep &RouteStep::AddInFront(const RouteStep &preceding_step)
 {
-    BOOST_ASSERT(preceeding_step.geometry_end == geometry_begin + 1);
-    BOOST_ASSERT(mode == preceeding_step.mode);
-    duration += preceeding_step.duration;
-    distance += preceeding_step.distance;
-    weight += preceeding_step.weight;
+    BOOST_ASSERT(preceding_step.geometry_end == geometry_begin + 1);
+    BOOST_ASSERT(mode == preceding_step.mode);
+    duration += preceding_step.duration;
+    distance += preceding_step.distance;
+    weight += preceding_step.weight;
 
-    geometry_begin = preceeding_step.geometry_begin;
+    geometry_begin = preceding_step.geometry_begin;
     intersections.insert(intersections.begin(),
-                         preceeding_step.intersections.begin(),
-                         preceeding_step.intersections.end());
+                         preceding_step.intersections.begin(),
+                         preceding_step.intersections.end());
 
     return *this;
 }
@@ -224,18 +220,16 @@ inline auto RouteStep::LanesToTheLeft() const
 {
     const auto &description = intersections.front().lane_description;
     LaneID num_lanes_left = NumLanesToTheLeft();
-    return boost::make_iterator_range(description.begin(), description.begin() + num_lanes_left);
+    return std::ranges::subrange(description.begin(), description.begin() + num_lanes_left);
 }
 
 inline auto RouteStep::LanesToTheRight() const
 {
     const auto &description = intersections.front().lane_description;
     LaneID num_lanes_right = NumLanesToTheRight();
-    return boost::make_iterator_range(description.end() - num_lanes_right, description.end());
+    return std::ranges::subrange(description.end() - num_lanes_right, description.end());
 }
 
-} // namespace guidance
-} // namespace engine
-} // namespace osrm
+} // namespace osrm::engine::guidance
 
 #endif

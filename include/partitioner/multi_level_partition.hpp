@@ -15,19 +15,18 @@
 #include <climits>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <numeric>
 #include <vector>
 
-#include <boost/range/adaptor/reversed.hpp>
+#include <ranges>
 
-namespace osrm
-{
-namespace partitioner
+namespace osrm::partitioner
 {
 namespace detail
 {
 template <storage::Ownership Ownership> class MultiLevelPartitionImpl;
-}
+} // namespace detail
 using MultiLevelPartition = detail::MultiLevelPartitionImpl<storage::Ownership::Container>;
 using MultiLevelPartitionView = detail::MultiLevelPartitionImpl<storage::Ownership::View>;
 
@@ -209,7 +208,8 @@ template <storage::Ownership Ownership> class MultiLevelPartitionImpl final
         auto lidx = 0UL;
         util::for_each_pair(level_offsets.begin(),
                             level_offsets.begin() + num_level,
-                            [&](const auto offset, const auto next_offset) {
+                            [&](const auto offset, const auto next_offset)
+                            {
                                 // create mask that has `bits` ones at its LSBs.
                                 // 000011
                                 BOOST_ASSERT(offset <= NUM_PARTITION_BITS);
@@ -218,9 +218,10 @@ template <storage::Ownership Ownership> class MultiLevelPartitionImpl final
                                 BOOST_ASSERT(next_offset <= NUM_PARTITION_BITS);
                                 // Check offset for shift overflow. Offsets are strictly increasing,
                                 // so we only need the check on the last mask.
-                                PartitionID next_mask = next_offset == NUM_PARTITION_BITS
-                                                            ? -1ULL
-                                                            : (1ULL << next_offset) - 1ULL;
+                                PartitionID next_mask =
+                                    next_offset == NUM_PARTITION_BITS
+                                        ? std::numeric_limits<PartitionID>::max()
+                                        : (1ULL << next_offset) - 1ULL;
                                 // 001100
                                 masks[lidx++] = next_mask ^ mask;
                             });
@@ -276,14 +277,13 @@ template <storage::Ownership Ownership> class MultiLevelPartitionImpl final
         {
             std::stable_sort(permutation.begin(),
                              permutation.end(),
-                             [&partition](const auto lhs, const auto rhs) {
-                                 return partition[lhs] < partition[rhs];
-                             });
+                             [&partition](const auto lhs, const auto rhs)
+                             { return partition[lhs] < partition[rhs]; });
         }
 
         // top down assign new cell ids
         LevelID level = partitions.size();
-        for (const auto &partition : boost::adaptors::reverse(partitions))
+        for (const auto &partition : std::ranges::reverse_view(partitions))
         {
             BOOST_ASSERT(permutation.size() > 0);
             CellID last_cell_id = partition[permutation.front()];
@@ -344,7 +344,6 @@ inline MultiLevelPartitionImpl<storage::Ownership::View>::MultiLevelPartitionImp
 {
 }
 } // namespace detail
-} // namespace partitioner
-} // namespace osrm
+} // namespace osrm::partitioner
 
 #endif

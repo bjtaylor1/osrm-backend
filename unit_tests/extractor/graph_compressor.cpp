@@ -9,7 +9,6 @@
 
 #include <boost/test/unit_test.hpp>
 
-#include <iostream>
 #include <unordered_set>
 #include <vector>
 
@@ -28,9 +27,9 @@ inline InputEdge MakeUnitEdge(const NodeID from, const NodeID to)
 {
     return {from,                          // source
             to,                            // target
-            1,                             // weight
-            1,                             // duration
-            1,                             // distance
+            EdgeWeight{1},                 // weight
+            EdgeDuration{1},               // duration
+            EdgeDistance{1},               // distance
             GeometryID{0, false},          // geometry_id
             false,                         // reversed
             NodeBasedEdgeClassification(), // default flags
@@ -65,8 +64,6 @@ BOOST_AUTO_TEST_CASE(long_road_test)
     //
     GraphCompressor compressor;
 
-    std::unordered_set<NodeID> barrier_nodes;
-    std::unordered_set<NodeID> traffic_lights;
     std::vector<TurnRestriction> restrictions;
     std::vector<NodeBasedEdgeAnnotation> annotations(1);
     CompressedEdgeContainer container;
@@ -87,14 +84,8 @@ BOOST_AUTO_TEST_CASE(long_road_test)
     BOOST_CHECK(compatible(graph, annotations, 2, 4));
     BOOST_CHECK(compatible(graph, annotations, 4, 6));
 
-    compressor.Compress(barrier_nodes,
-                        traffic_lights,
-                        scripting_environment,
-                        restrictions,
-                        maneuver_overrides,
-                        graph,
-                        annotations,
-                        container);
+    compressor.Compress(
+        scripting_environment, restrictions, maneuver_overrides, graph, annotations, container);
     BOOST_CHECK_EQUAL(graph.FindEdge(0, 1), SPECIAL_EDGEID);
     BOOST_CHECK_EQUAL(graph.FindEdge(1, 2), SPECIAL_EDGEID);
     BOOST_CHECK_EQUAL(graph.FindEdge(2, 3), SPECIAL_EDGEID);
@@ -111,8 +102,6 @@ BOOST_AUTO_TEST_CASE(loop_test)
     //
     GraphCompressor compressor;
 
-    std::unordered_set<NodeID> barrier_nodes;
-    std::unordered_set<NodeID> traffic_lights;
     std::vector<TurnRestriction> restrictions;
     CompressedEdgeContainer container;
     std::vector<NodeBasedEdgeAnnotation> annotations(1);
@@ -147,14 +136,8 @@ BOOST_AUTO_TEST_CASE(loop_test)
     BOOST_CHECK(compatible(graph, annotations, 10, 11));
     BOOST_CHECK(compatible(graph, annotations, 11, 0));
 
-    compressor.Compress(barrier_nodes,
-                        traffic_lights,
-                        scripting_environment,
-                        restrictions,
-                        maneuver_overrides,
-                        graph,
-                        annotations,
-                        container);
+    compressor.Compress(
+        scripting_environment, restrictions, maneuver_overrides, graph, annotations, container);
 
     BOOST_CHECK_EQUAL(graph.FindEdge(5, 0), SPECIAL_EDGEID);
     BOOST_CHECK_EQUAL(graph.FindEdge(0, 1), SPECIAL_EDGEID);
@@ -174,8 +157,6 @@ BOOST_AUTO_TEST_CASE(t_intersection)
     //
     GraphCompressor compressor;
 
-    std::unordered_set<NodeID> barrier_nodes;
-    std::unordered_set<NodeID> traffic_lights;
     std::vector<NodeBasedEdgeAnnotation> annotations(1);
     std::vector<TurnRestriction> restrictions;
     CompressedEdgeContainer container;
@@ -196,14 +177,8 @@ BOOST_AUTO_TEST_CASE(t_intersection)
     BOOST_CHECK(compatible(graph, annotations, 3, 4));
     BOOST_CHECK(compatible(graph, annotations, 4, 5));
 
-    compressor.Compress(barrier_nodes,
-                        traffic_lights,
-                        scripting_environment,
-                        restrictions,
-                        maneuver_overrides,
-                        graph,
-                        annotations,
-                        container);
+    compressor.Compress(
+        scripting_environment, restrictions, maneuver_overrides, graph, annotations, container);
 
     BOOST_CHECK(graph.FindEdge(0, 1) != SPECIAL_EDGEID);
     BOOST_CHECK(graph.FindEdge(1, 2) != SPECIAL_EDGEID);
@@ -217,8 +192,6 @@ BOOST_AUTO_TEST_CASE(street_name_changes)
     //
     GraphCompressor compressor;
 
-    std::unordered_set<NodeID> barrier_nodes;
-    std::unordered_set<NodeID> traffic_lights;
     std::vector<NodeBasedEdgeAnnotation> annotations(2);
     std::vector<TurnRestriction> restrictions;
     CompressedEdgeContainer container;
@@ -235,14 +208,8 @@ BOOST_AUTO_TEST_CASE(street_name_changes)
     BOOST_CHECK(compatible(graph, annotations, 0, 1));
     BOOST_CHECK(compatible(graph, annotations, 2, 3));
 
-    compressor.Compress(barrier_nodes,
-                        traffic_lights,
-                        scripting_environment,
-                        restrictions,
-                        maneuver_overrides,
-                        graph,
-                        annotations,
-                        container);
+    compressor.Compress(
+        scripting_environment, restrictions, maneuver_overrides, graph, annotations, container);
 
     BOOST_CHECK(graph.FindEdge(0, 1) != SPECIAL_EDGEID);
     BOOST_CHECK(graph.FindEdge(1, 2) != SPECIAL_EDGEID);
@@ -255,8 +222,6 @@ BOOST_AUTO_TEST_CASE(direction_changes)
     //
     GraphCompressor compressor;
 
-    std::unordered_set<NodeID> barrier_nodes;
-    std::unordered_set<NodeID> traffic_lights;
     std::vector<NodeBasedEdgeAnnotation> annotations(1);
     std::vector<TurnRestriction> restrictions;
     CompressedEdgeContainer container;
@@ -269,14 +234,8 @@ BOOST_AUTO_TEST_CASE(direction_changes)
     edges[1].data.reversed = true;
 
     Graph graph(5, edges);
-    compressor.Compress(barrier_nodes,
-                        traffic_lights,
-                        scripting_environment,
-                        restrictions,
-                        maneuver_overrides,
-                        graph,
-                        annotations,
-                        container);
+    compressor.Compress(
+        scripting_environment, restrictions, maneuver_overrides, graph, annotations, container);
 
     BOOST_CHECK(graph.FindEdge(0, 1) != SPECIAL_EDGEID);
     BOOST_CHECK(graph.FindEdge(1, 2) != SPECIAL_EDGEID);

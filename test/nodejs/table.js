@@ -1,14 +1,32 @@
-var OSRM = require('../../');
-var test = require('tape');
-var data_path = require('./constants').data_path;
-var mld_data_path = require('./constants').mld_data_path;
-var three_test_coordinates = require('./constants').three_test_coordinates;
-var two_test_coordinates = require('./constants').two_test_coordinates;
+// Test table service functionality with distance/duration matrices
+import OSRM from '../../lib/index.js';
+import test from 'tape';
+import { data_path, mld_data_path, three_test_coordinates, two_test_coordinates } from './constants.js';
+import flatbuffers from 'flatbuffers';
+import { osrm } from '../../features/support/fbresult_generated.js';
+
+const FBResult = osrm.engine.api.fbresult.FBResult;
+
+test('table: flatbuffer format', function(assert) {
+    assert.plan(3);
+    const osrm = new OSRM(data_path);
+    const options = {
+        coordinates: [three_test_coordinates[0], three_test_coordinates[1]],
+        format: 'flatbuffers'
+    };
+    osrm.table(options, function(err, table) {
+        assert.ifError(err);
+        assert.ok(table instanceof Buffer);
+        const fb = FBResult.getRootAsFBResult(new flatbuffers.ByteBuffer(table));
+        assert.ok(fb.table());
+
+    });
+});
 
 test('table: test annotations paramater combination', function(assert) {
     assert.plan(12);
-    var osrm = new OSRM(data_path);
-    var options = {
+    const osrm = new OSRM(data_path);
+    let options = {
         coordinates: [three_test_coordinates[0], three_test_coordinates[1]],
         annotations: ['distance']
     };
@@ -50,8 +68,8 @@ test('table: test annotations paramater combination', function(assert) {
 
 test('table: returns buffer', function(assert) {
     assert.plan(3);
-    var osrm = new OSRM(data_path);
-    var options = {
+    const osrm = new OSRM(data_path);
+    const options = {
         coordinates: [three_test_coordinates[0], three_test_coordinates[1]],
     };
     osrm.table(options, { format: 'json_buffer' }, function(err, table) {
@@ -62,25 +80,50 @@ test('table: returns buffer', function(assert) {
     });
 });
 
-var tables = ['distances', 'durations'];
+test('table: throws on invalid snapping values', function (assert) {
+    assert.plan(1);
+    const osrm = new OSRM(data_path);
+    const options = {
+        coordinates: [three_test_coordinates[0], three_test_coordinates[1]],
+        snapping: 'zing'
+    };
+    assert.throws(function () { osrm.table(options, function (err, response) { }); },
+        /'snapping' param must be one of \[default, any\]/);
+});
 
+test('table: snapping parameter passed through OK', function (assert) {
+    assert.plan(2);
+    const osrm = new OSRM(data_path);
+    const options = {
+        coordinates: [three_test_coordinates[0], three_test_coordinates[1]],
+        snapping: 'any'
+    };
+    osrm.table(options, function(err, table) {
+        assert.ifError(err);
+        assert.ok(table['durations'], 'distances table result should exist');
+    });
+});
+
+const tables = ['distances', 'durations'];
+
+// Generate tests for both 'distances' and 'durations' table types
 tables.forEach(function(annotation) {
     test('table: ' + annotation + ' table in Monaco', function(assert) {
         assert.plan(11);
-        var osrm = new OSRM(data_path);
-        var options = {
+        const osrm = new OSRM(data_path);
+        const options = {
             coordinates: [three_test_coordinates[0], three_test_coordinates[1]],
             annotations: [annotation.slice(0,-1)]
         };
         osrm.table(options, function(err, table) {
             assert.ifError(err);
             assert.ok(Array.isArray(table[annotation]), 'result must be an array');
-            var row_count = table[annotation].length;
-            for (var i = 0; i < row_count; ++i) {
-                var column = table[annotation][i];
-                var column_count = column.length;
+            const row_count = table[annotation].length;
+            for (let i = 0; i < row_count; ++i) {
+                const column = table[annotation][i];
+                const column_count = column.length;
                 assert.equal(row_count, column_count);
-                for (var j = 0; j < column_count; ++j) {
+                for (let j = 0; j < column_count; ++j) {
                     if (i == j) {
                         // check that diagonal is zero
                         assert.equal(0, column[j], 'diagonal must be zero');
@@ -98,8 +141,8 @@ tables.forEach(function(annotation) {
 
     test('table: ' + annotation + ' table in Monaco with sources/destinations', function(assert) {
         assert.plan(7);
-        var osrm = new OSRM(data_path);
-        var options = {
+        const osrm = new OSRM(data_path);
+        const options = {
             coordinates: [three_test_coordinates[0], three_test_coordinates[1]],
             sources: [0],
             destinations: [0,1],
@@ -108,12 +151,12 @@ tables.forEach(function(annotation) {
         osrm.table(options, function(err, table) {
             assert.ifError(err);
             assert.ok(Array.isArray(table[annotation]), 'result must be an array');
-            var row_count = table[annotation].length;
-            for (var i = 0; i < row_count; ++i) {
-                var column = table[annotation][i];
-                var column_count = column.length;
+            const row_count = table[annotation].length;
+            for (let i = 0; i < row_count; ++i) {
+                const column = table[annotation][i];
+                const column_count = column.length;
                 assert.equal(options.destinations.length, column_count);
-                for (var j = 0; j < column_count; ++j) {
+                for (let j = 0; j < column_count; ++j) {
                     if (i == j) {
                         // check that diagonal is zero
                         assert.equal(0, column[j], 'diagonal must be zero');
@@ -130,9 +173,9 @@ tables.forEach(function(annotation) {
     });
 
     test('table: ' + annotation + ' throws on invalid arguments', function(assert) {
-        assert.plan(17);
-        var osrm = new OSRM(data_path);
-        var options = {annotations: [annotation.slice(0,-1)]};
+        assert.plan(18);
+        const osrm = new OSRM(data_path);
+        const options = {annotations: [annotation.slice(0,-1)]};
         assert.throws(function() { osrm.table(options); },
             /Two arguments required/);
         options.coordinates = null;
@@ -190,19 +233,21 @@ tables.forEach(function(annotation) {
 
         assert.throws(function() { osrm.route({coordinates: two_test_coordinates, generate_hints: null}, function(err, route) {}) },
             /generate_hints must be of type Boolean/);
+        assert.throws(function() { osrm.route({coordinates: two_test_coordinates, skip_waypoints: null}, function(err, route) {}) },
+            /skip_waypoints must be of type Boolean/);
     });
 
     test('table: throws on invalid arguments', function(assert) {
         assert.plan(1);
-        var osrm = new OSRM(data_path);
+        const osrm = new OSRM(data_path);
         assert.throws(function() { osrm.table(null, function() {}); },
             /First arg must be an object/);
     });
 
     test('table: ' + annotation + ' table in Monaco with hints', function(assert) {
         assert.plan(5);
-        var osrm = new OSRM(data_path);
-        var options = {
+        const osrm = new OSRM(data_path);
+        const options = {
             coordinates: two_test_coordinates,
             generate_hints: true,   // true is default but be explicit here
             annotations: [annotation.slice(0,-1)]
@@ -210,6 +255,7 @@ tables.forEach(function(annotation) {
         osrm.table(options, function(err, table) {
             assert.ifError(err);
 
+            // Helper function to verify waypoint contains hint data
             function assertHasHints(waypoint) {
                 assert.notStrictEqual(waypoint.hint, undefined);
             }
@@ -221,8 +267,8 @@ tables.forEach(function(annotation) {
 
     test('table: ' + annotation + ' table in Monaco without hints', function(assert) {
         assert.plan(5);
-        var osrm = new OSRM(data_path);
-        var options = {
+        const osrm = new OSRM(data_path);
+        const options = {
             coordinates: two_test_coordinates,
             generate_hints: false,  // true is default
             annotations: [annotation.slice(0,-1)]
@@ -230,6 +276,7 @@ tables.forEach(function(annotation) {
         osrm.table(options, function(err, table) {
             assert.ifError(err);
 
+            // Helper function to verify waypoint has no hint data
             function assertHasNoHints(waypoint) {
                 assert.strictEqual(waypoint.hint, undefined);
             }
@@ -239,10 +286,24 @@ tables.forEach(function(annotation) {
         });
     });
 
+    test('table: ' + annotation + ' table in Monaco without waypoints', function(assert) {
+        assert.plan(2);
+        const osrm = new OSRM(data_path);
+        const options = {
+            coordinates: two_test_coordinates,
+            skip_waypoints: true,  // false is default
+            annotations: [annotation.slice(0,-1)]
+        };
+        osrm.table(options, function(err, table) {
+            assert.strictEqual(table.sources, undefined);
+            assert.strictEqual(table.destinations, undefined);
+        });
+    });
+
     test('table: ' + annotation + ' table in Monaco without motorways', function(assert) {
         assert.plan(2);
-        var osrm = new OSRM({path: mld_data_path, algorithm: 'MLD'});
-        var options = {
+        const osrm = new OSRM({path: mld_data_path, algorithm: 'MLD'});
+        const options = {
             coordinates: two_test_coordinates,
             exclude: ['motorway'],
             annotations: [annotation.slice(0,-1)]
@@ -255,8 +316,8 @@ tables.forEach(function(annotation) {
 
     test('table: ' + annotation + ' table in Monaco with fallback speeds', function(assert) {
         assert.plan(2);
-        var osrm = new OSRM({path: mld_data_path, algorithm: 'MLD'});
-        var options = {
+        const osrm = new OSRM({path: mld_data_path, algorithm: 'MLD'});
+        const options = {
             coordinates: two_test_coordinates,
             annotations: [annotation.slice(0,-1)],
             fallback_speed: 1,
@@ -270,8 +331,8 @@ tables.forEach(function(annotation) {
 
     test('table: ' + annotation + ' table in Monaco with invalid fallback speeds and fallback coordinates', function(assert) {
         assert.plan(4);
-        var osrm = new OSRM({path: mld_data_path, algorithm: 'MLD'});
-        var options = {
+        const osrm = new OSRM({path: mld_data_path, algorithm: 'MLD'});
+        const options = {
             coordinates: two_test_coordinates,
             annotations: [annotation.slice(0,-1)],
             fallback_speed: -1
@@ -293,8 +354,8 @@ tables.forEach(function(annotation) {
 
     test('table: ' + annotation + ' table in Monaco with invalid scale factor', function(assert) {
         assert.plan(3);
-        var osrm = new OSRM({path: mld_data_path, algorithm: 'MLD'});
-        var options = {
+        const osrm = new OSRM({path: mld_data_path, algorithm: 'MLD'});
+        const options = {
             coordinates: two_test_coordinates,
             annotations: [annotation.slice(0,-1)],
             scale_factor: -1
@@ -308,6 +369,47 @@ tables.forEach(function(annotation) {
         options.scale_factor = 0;
         assert.throws(()=>osrm.table(options, (err, res) => {}), /scale_factor must be > 0/, "should throw on invalid scale_factor value");
 
+    });
+});
+
+test('table: throws on disabled geometry', function (assert) {
+    assert.plan(1);
+    const osrm = new OSRM({'path': data_path, 'disable_feature_dataset': ['ROUTE_GEOMETRY']});
+    const options = {
+        coordinates: [three_test_coordinates[0], three_test_coordinates[1]],
+    };
+    osrm.table(options, function(err, table) {
+        console.log(err)
+        assert.match(err.message, /DisabledDatasetException/);
+    });
+});
+
+test('table: ok on disabled geometry', function (assert) {
+    assert.plan(4);
+    const osrm = new OSRM({'path': data_path, 'disable_feature_dataset': ['ROUTE_GEOMETRY']});
+    const options = {
+        coordinates: [three_test_coordinates[0], three_test_coordinates[1]],
+        skip_waypoints: true
+    };
+    osrm.table(options, function(err, table) {
+        assert.ifError(err);
+        assert.ok(table.durations, 'distances table result should exist');
+        assert.notok(table.sources)
+        assert.notok(table.destinations)
+    });
+});
+
+test('table: ok on disabled steps', function (assert) {
+    assert.plan(4);
+    const osrm = new OSRM({'path': data_path, 'disable_feature_dataset': ['ROUTE_STEPS']});
+    const options = {
+        coordinates: [three_test_coordinates[0], three_test_coordinates[1]],
+    };
+    osrm.table(options, function(err, table) {
+        assert.ifError(err);
+        assert.ok(table.durations, 'distances table result should exist');
+        assert.ok(table.sources.length, 2)
+        assert.ok(table.destinations.length, 2)
     });
 });
 

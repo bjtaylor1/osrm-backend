@@ -6,9 +6,7 @@
 #include <iterator>
 #include <vector>
 
-namespace osrm
-{
-namespace engine
+namespace osrm::engine
 {
 namespace detail
 {
@@ -26,7 +24,9 @@ inline std::vector<std::uint64_t> generateThreshold(double min_pixel, unsigned n
         const double shift = (1u << zoom) * 256;
         const double b = shift / 2.0;
         const double pixel_to_deg = 180. / b;
-        const std::uint64_t min_deg = min_pixel * pixel_to_deg * COORDINATE_PRECISION;
+        // Safe conversion: geographic coordinate calculation always produces positive integers
+        const std::uint64_t min_deg =
+            static_cast<std::uint64_t>(min_pixel * pixel_to_deg * COORDINATE_PRECISION);
         thresholds[zoom] = min_deg * min_deg;
     }
 
@@ -75,7 +75,6 @@ inline std::vector<util::Coordinate> douglasPeucker(const std::vector<util::Coor
 {
     return douglasPeucker(begin(geometry), end(geometry), zoom_level);
 }
-} // namespace engine
-} // namespace osrm
+} // namespace osrm::engine
 
 #endif /* DOUGLAS_PEUCKER_HPP_ */

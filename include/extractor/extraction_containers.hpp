@@ -10,10 +10,9 @@
 #include "storage/tar_fwd.hpp"
 
 #include <unordered_map>
+#include <unordered_set>
 
-namespace osrm
-{
-namespace extractor
+namespace osrm::extractor
 {
 
 /**
@@ -26,7 +25,7 @@ class ExtractionContainers
 {
     using ReferencedWays = std::unordered_map<OSMWayID, NodesOfWay>;
     // The relationship between way and nodes is lost during node preparation.
-    // We identify the ways and nodes relevant to restrictions/overrides prior to
+    // We identify the ways and nodes relevant to restrictions/overrides/obstacles prior to
     // node processing so that they can be referenced in the preparation phase.
     ReferencedWays IdentifyRestrictionWays();
     ReferencedWays IdentifyManeuverOverrideWays();
@@ -36,9 +35,6 @@ class ExtractionContainers
     void PrepareRestrictions(const ReferencedWays &restriction_ways);
     void PrepareEdges(ScriptingEnvironment &scripting_environment);
 
-    void WriteNodes(storage::tar::FileWriter &file_out) const;
-    void WriteEdges(storage::tar::FileWriter &file_out) const;
-    void WriteMetadata(storage::tar::FileWriter &file_out) const;
     void WriteCharData(const std::string &file_name);
 
   public:
@@ -51,8 +47,6 @@ class ExtractionContainers
     using WayIDVector = std::vector<OSMWayID>;
     using WayNodeIDOffsets = std::vector<size_t>;
 
-    std::vector<OSMNodeID> barrier_nodes;
-    std::vector<OSMNodeID> traffic_signals;
     NodeIDVector used_node_id_list;
     NodeVector all_nodes_list;
     EdgeVector all_edges_list;
@@ -65,6 +59,8 @@ class ExtractionContainers
 
     unsigned max_internal_node_id;
 
+    std::vector<NodeBasedEdge> used_edges;
+
     // List of restrictions (conditional and unconditional) before we transform them into the
     // output types. Input containers reference OSMNodeIDs. We can only transform them to the
     // correct internal IDs after we've read everything. Without a multi-parse approach,
@@ -74,14 +70,13 @@ class ExtractionContainers
 
     std::vector<InputManeuverOverride> external_maneuver_overrides_list;
     std::vector<UnresolvedManeuverOverride> internal_maneuver_overrides;
+    NodeVector used_nodes;
 
     ExtractionContainers();
 
     void PrepareData(ScriptingEnvironment &scripting_environment,
-                     const std::string &osrm_path,
                      const std::string &names_data_path);
 };
-} // namespace extractor
-} // namespace osrm
+} // namespace osrm::extractor
 
 #endif /* EXTRACTION_CONTAINERS_HPP */

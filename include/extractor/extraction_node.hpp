@@ -1,19 +1,18 @@
 #ifndef EXTRACTION_NODE_HPP
 #define EXTRACTION_NODE_HPP
 
-namespace osrm
-{
-namespace extractor
+#include <osmium/osm/node.hpp>
+
+namespace osrm::extractor
 {
 
 struct ExtractionNode
 {
-    ExtractionNode() : traffic_lights(false), barrier(false) {}
-    void clear() { traffic_lights = barrier = false; }
-    bool traffic_lights;
-    bool barrier;
+    ExtractionNode() {}
+
+    // the current node
+    const osmium::Node *node;
 };
-} // namespace extractor
-} // namespace osrm
+} // namespace osrm::extractor
 
 #endif // EXTRACTION_NODE_HPP

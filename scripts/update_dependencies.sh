@@ -7,31 +7,36 @@ set -o nounset
 # Note: once the subtree merge from this script has been committed and pushed to
 # a branch do not attempt to rebase the branch back onto master or the subdirectory
 # structure will be lost.
-# http://git.661346.n2.nabble.com/subtree-merges-lose-prefix-after-rebase-td7332850.html
+# https://stackoverflow.com/questions/12858199/how-to-rebase-after-git-subtree-add
 
 OSMIUM_PATH="osmcode/libosmium"
-OSMIUM_TAG=v2.14.0
-
-VARIANT_PATH="mapbox/variant"
-VARIANT_TAG=v1.1.3
+OSMIUM_TAG=v2.20.0
 
 SOL_PATH="ThePhD/sol2"
-SOL_TAG=v2.17.5
+SOL_TAG=v3.3.0
 
 RAPIDJSON_PATH="Tencent/rapidjson"
-RAPIDJSON_TAG=v1.1.0
+RAPIDJSON_TAG=f9d53419e912910fd8fa57d5705fa41425428c35
 
 MICROTAR_PATH="rxi/microtar"
 MICROTAR_TAG=v0.1.0
 
 PROTOZERO_PATH="mapbox/protozero"
-PROTOZERO_TAG=v1.6.2
+PROTOZERO_TAG=v1.8.1
 
 VTZERO_PATH="mapbox/vtzero"
-VTZERO_TAG=v1.0.1
+VTZERO_TAG=v1.1.0
+
+# Note: fmt is kept for backward compatibility with compilers lacking std::format support
+# (e.g., Clang with older libstdc++). Will be removed once GCC 13+ becomes minimum requirement.
+FMT_PATH="fmtlib/fmt"
+FMT_TAG=11.2.0
+
+FLATBUFFERS_PATH="google/flatbuffers"
+FLATBUFFERS_TAG=v24.3.25
 
 function update_subtree () {
-    name=${1^^}
+    name=$(echo "$1" | tr '[:lower:]' '[:upper:]')
     path=$(tmpvar=${name}_PATH && echo ${!tmpvar})
     tag=$(tmpvar=${name}_TAG && echo ${!tmpvar})
     dir=$(basename $path)
@@ -53,6 +58,6 @@ function update_subtree () {
 }
 
 ## Update dependencies
-for dep in osmium variant sol rapidjson microtar protozero vtzero ; do
+for dep in osmium sol rapidjson microtar protozero vtzero fmt flatbuffers; do
     update_subtree $dep
 done

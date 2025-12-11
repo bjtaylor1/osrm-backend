@@ -1,14 +1,12 @@
 {
-  "name": "osrm",
-  "version": "5.27.0-unreleased",
+  "name": "@project-osrm/osrm",
+  "version": "6.0.0",
   "private": false,
-  "description": "The Open Source Routing Machine is a high performance routing engine written in C++14 designed to run on OpenStreetMap data.",
+  "type": "module",
+  "description": "The Open Source Routing Machine is a high performance routing engine written in C++ designed to run on OpenStreetMap data.",
   "dependencies": {
-    "@mapbox/node-pre-gyp": "^1.0.1",
-    "mkdirp": "^0.5.5",
-    "nan": "^2.14.2",
-    "node-cmake": "^2.5.1",
-    "rimraf": "^2.7.1"
+    "@mapbox/node-pre-gyp": "2.0.0",
+    "seedrandom": "^3.0.5"
   },
   "browserify": {
     "transform": [
@@ -17,12 +15,13 @@
     ]
   },
   "scripts": {
-    "lint": "node ./node_modules/eslint/bin/eslint.js -c ./.eslintrc features/step_definitions/ features/support/",
-    "test": "npm run lint && node ./node_modules/cucumber/bin/cucumber.js features/ -p verify && node ./node_modules/cucumber/bin/cucumber.js features/ -p verify -m mmap && node ./node_modules/cucumber/bin/cucumber.js features/ -p mld && node ./node_modules/cucumber/bin/cucumber.js features/ -p mld -m mmap",
+    "lint": "npx eslint features/",
+    "test": "npm run lint && ./scripts/cucumber_test_matrix.sh",
     "clean": "rm -rf test/cache",
     "docs": "./scripts/build_api_docs.sh",
     "install": "node-pre-gyp install --fallback-to-build=false || ./scripts/node_install.sh",
-    "nodejs-tests": "make -C test/data && ./lib/binding/osrm-datastore test/data/ch/monaco.osrm && node test/nodejs/index.js | faucet"
+    "nodejs-tests": "make -C test/data && ./lib/binding/osrm-datastore test/data/ch/monaco.osrm && node test/nodejs/index.js | faucet",
+    "prepare": "husky"
   },
   "repository": {
     "type": "git",
@@ -35,50 +34,59 @@
   },
   "homepage": "https://github.com/Project-OSRM/osrm-backend",
   "engines": {
-    "node": ">=4.0.0"
+    "node": ">=20.0.0"
   },
   "devDependencies": {
-    "@babel/cli": "^7.14.5",
-    "@babel/core": "^7.14.6",
-    "@babel/preset-env": "^7.14.5",
-    "@babel/preset-react": "^7.14.5",
-    "acorn": "^8.4.0",
-    "ansi-escape-sequences": "^5.1.2",
-    "aws-sdk": "~2.0.31",
-    "babel-plugin-transform-class-properties": "^6.24.1",
+    "@babel/cli": "^7.18.10",
+    "@babel/core": "^7.18.13",
+    "@babel/plugin-transform-class-properties": "^7.18.10",
+    "@babel/preset-env": "^7.18.10",
+    "@babel/preset-react": "^7.18.6",
+    "@cucumber/cucumber": "^12.1.0",
+    "@mapbox/polyline": "1.2.1",
+    "@turf/turf": "7.2.0",
+    "acorn": "8.14.1",
+    "ansi-escape-sequences": "6.2.4",
     "babelify": "^10.0.0",
-    "browserify": "^17.0.0",
-    "chalk": "^1.1.3",
-    "command-line-args": "^5.1.1",
-    "command-line-usage": "^5.0.4",
-    "csv-stringify": "^3.0.0",
-    "cucumber": "^1.2.1",
-    "d3-queue": "^2.0.3",
+    "browserify": "17.0.1",
+    "chalk": "^5.6.0",
+    "cheap-ruler": "^4.0.0",
+    "command-line-args": "6.0.1",
+    "command-line-usage": "7.0.3",
+    "csv-stringify": "6.5.2",
+    "d3-queue": "3.0.7",
     "docbox": "^1.0.11",
-    "documentation": "^4.0.0",
-    "eslint": "^5.16.0",
-    "faucet": "^0.0.1",
-    "jsonpath": "^1.1.0",
-    "node-timeout": "0.0.4",
-    "polyline": "^0.2.0",
-    "request": "^2.88.2",
-    "tape": "^4.13.3",
-    "turf": "^3.0.14",
-    "uglify-js": "^3.13.9",
-    "xmlbuilder": "^4.2.1"
+    "documentation": "^14.0.2",
+    "eslint": "9.26.0",
+    "faucet": "^0.0.4",
+    "flatbuffers": "24.3.25",
+    "husky": "^9.1.7",
+    "jsonpath": "^1.1.1",
+    "lint-staged": "^16.1.6",
+    "node-addon-api": "8.3.1",
+    "node-cmake": "^2.5.1",
+    "tape": "5.9.0",
+    "uglify-js": "^3.17.0",
+    "xmlbuilder": "15.1.1"
   },
-  "bundleDependencies": [
-    "mkdirp",
-    "nan",
-    "node-cmake",
-    "rimraf"
-  ],
   "main": "lib/index.js",
   "binary": {
+    "napi_versions": [
+      8
+    ],
     "module_name": "node_osrm",
-    "module_path": "./lib/binding/",
+    "module_path": "./lib/binding_napi_v{napi_build_version}/",
     "host": "https://github.com",
     "remote_path": "./Project-OSRM/osrm-backend/releases/download/v{version}/",
-    "package_name": "{module_name}-v{version}-{node_abi}-{platform}-{arch}-{configuration}.tar.gz"
+    "package_name": "{module_name}-v{version}-{napi_build_version}-{platform}-{arch}-{configuration}.tar.gz"
+  },
+  "lint-staged": {
+    "features/**/*.js": [
+      "node --check",
+      "eslint --fix"
+    ]
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
