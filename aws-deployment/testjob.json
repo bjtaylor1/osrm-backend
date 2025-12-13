@@ -1,0 +1,13 @@
+{
+  "jobName": "monaco-pipeline",
+  "jobQueue": "osrm-batch-queue",
+  "jobDefinition": "osrm-batch-job",
+  "containerOverrides": {
+    "environment": [
+      {"name": "OSRM_OPERATION", "value": "pipeline"},
+      {"name": "OSM_FILE", "value": "http://download.geofabrik.de/europe/monaco-latest.osm.pbf"},
+      {"name": "PROFILE", "value": "bicycle_paved"},
+      {"name": "OSRM_OUTPUT_DIR", "value": "s3://my-osrm-data-715/monaco/"}
+    ]
+  }
+}

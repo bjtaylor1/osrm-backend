@@ -1,0 +1,1 @@
+aws batch submit-job --cli-input-json file://testjob.json --region us-east-1

@@ -96,17 +96,29 @@ RUN cat > /scripts/entrypoint.sh << 'EOF'
 #!/bin/bash
 set -euo pipefail
 
+# Trap errors and log them before exiting
+trap 'echo "$(date "+%Y-%m-%d %H:%M:%S") - FATAL ERROR at line $LINENO: Command failed with exit code $?" >&2' ERR
+
 # Logging setup
 exec > >(tee -a ${OSRM_LOG_DIR}/osrm-batch.log) 2>&1
+
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting OSRM AWS Batch processing"
 echo "Container ID: ${HOSTNAME}"
-echo "AWS Region: ${AWS_DEFAULT_REGION}"
+echo "AWS Region: ${AWS_DEFAULT_REGION:-not set}"
 echo "Data directory: ${OSRM_DATA_DIR}"
 echo "Output directory: ${OSRM_OUTPUT_DIR}"
+echo "OSRM Operation: ${OSRM_OPERATION:-NOT SET}"
 
 # Function to handle errors
 handle_error() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: $1" >&2
+    local error_msg="$1"
+    local line_no="${2:-unknown}"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR at line ${line_no}: ${error_msg}" >&2
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Stack trace:" >&2
+    local frame=0
+    while caller $frame; do
+        ((frame++))
+    done
     exit 1
 }
 
@@ -148,21 +160,40 @@ upload_s3_file() {
 
 # Validate required environment variables based on operation
 validate_env_vars() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Validating environment variables for operation: ${OSRM_OPERATION:-NONE}"
+    
     case "${OSRM_OPERATION:-}" in
         extract)
-            [[ -n "${OSM_FILE:-}" ]] || handle_error "OSM_FILE is required for extract operation"
-            [[ -n "${PROFILE:-}" ]] || handle_error "PROFILE is required for extract operation"
+            [[ -n "${OSM_FILE:-}" ]] || handle_error "OSM_FILE is required for extract operation" $LINENO
+            [[ -n "${PROFILE:-}" ]] || handle_error "PROFILE is required for extract operation" $LINENO
+            echo "  ✓ OSM_FILE: ${OSM_FILE}"
+            echo "  ✓ PROFILE: ${PROFILE}"
             ;;
         contract|partition|customize)
-            [[ -n "${OSRM_FILE:-}" ]] || handle_error "OSRM_FILE is required for ${OSRM_OPERATION} operation"
+            [[ -n "${OSRM_FILE:-}" ]] || handle_error "OSRM_FILE is required for ${OSRM_OPERATION} operation" $LINENO
+            echo "  ✓ OSRM_FILE: ${OSRM_FILE}"
             ;;
         routed)
-            [[ -n "${OSRM_FILE:-}" ]] || handle_error "OSRM_FILE is required for routed operation"
+            [[ -n "${OSRM_FILE:-}" ]] || handle_error "OSRM_FILE is required for routed operation" $LINENO
+            echo "  ✓ OSRM_FILE: ${OSRM_FILE}"
+            ;;
+        pipeline)
+            [[ -n "${OSM_FILE:-}" ]] || handle_error "OSM_FILE is required for pipeline operation" $LINENO
+            [[ -n "${PROFILE:-}" ]] || handle_error "PROFILE is required for pipeline operation" $LINENO
+            echo "  ✓ OSM_FILE: ${OSM_FILE}"
+            echo "  ✓ PROFILE: ${PROFILE}"
+            echo "  ✓ OSRM_OUTPUT_DIR: ${OSRM_OUTPUT_DIR:-not set}"
+            echo "  ✓ SPLIT_CONFIG: ${SPLIT_CONFIG:-not set}"
+            ;;
+        help)
+            # No validation needed for help
             ;;
         *)
-            handle_error "Unknown or missing OSRM_OPERATION: ${OSRM_OPERATION:-}"
+            handle_error "Unknown or missing OSRM_OPERATION: '${OSRM_OPERATION:-}'. Valid operations: extract, contract, partition, customize, pipeline, routed, help" $LINENO
             ;;
     esac
+    
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Environment validation passed"
 }
 
 # Main processing function
@@ -299,6 +330,170 @@ main() {
                 --port "${OSRM_PORT:-5000}" \
                 --threads "$(nproc)" \
                 ${ROUTED_EXTRA_ARGS:-} || handle_error "osrm-routed failed"
+            ;;
+            
+        help)
+            echo "=========================================="
+            echo "OSRM AWS Batch Container"
+            echo "=========================================="
+            echo ""
+            echo "OSRM Version Information:"
+            /usr/local/bin/osrm-extract --version || true
+            echo ""
+            echo "Available Operations:"
+            echo "  extract   - Extract routing data from OSM file"
+            echo "  partition - Partition the routing graph (MLD)"
+            echo "  customize - Customize the routing graph (MLD)"
+            echo "  contract  - Contract the routing graph (CH)"
+            echo "  pipeline  - Complete pipeline (download → split if needed → extract → partition → customize → upload)"
+            echo "  routed    - Start OSRM routing server"
+            echo ""
+            echo "Available OSRM Tools:"
+            ls -1 /usr/local/bin/osrm-*
+            echo ""
+            echo "Available Profiles:"
+            ls -1 /opt/*.lua
+            echo ""
+            echo "System Information:"
+            echo "  CPUs: $(nproc)"
+            echo "  Memory: $(free -h | grep Mem | awk '{print $2}')"
+            echo "  AWS Region: ${AWS_DEFAULT_REGION:-not set}"
+            echo "=========================================="
+            ;;
+            
+        pipeline)
+            local osm_local_file="${OSRM_DATA_DIR}/input.osm.pbf"
+            local profile_path="/opt/${PROFILE}.lua"
+            local split_config="${SPLIT_CONFIG:-}"
+            
+            # Download OSM file
+            download_s3_file "${OSM_FILE}" "${osm_local_file}"
+            
+            # Validate profile exists
+            [[ -f "${profile_path}" ]] || handle_error "Profile ${PROFILE}.lua not found"
+            
+            # Check if split config is provided
+            if [[ -n "${split_config}" ]]; then
+                log_progress "Split configuration provided, downloading: ${split_config}"
+                
+                # Download split config (supports S3 or HTTP)
+                local split_config_file="${OSRM_DATA_DIR}/split-config.json"
+                download_s3_file "${split_config}" "${split_config_file}"
+                
+                # Get bounding box from OSM file for latitude bounds
+                local bbox=$(osmium fileinfo -e -g data.bbox "${osm_local_file}" | grep -oP '(?<=\()[-0-9.,]+(?=\))')
+                IFS=',' read -r osm_min_lon osm_min_lat osm_max_lon osm_max_lat <<< "$bbox"
+                log_progress "OSM bounding box: lon(${osm_min_lon},${osm_max_lon}) lat(${osm_min_lat},${osm_max_lat})"
+                
+                # Parse and process each slice from config
+                local num_slices=$(jq '.slices | length' "${split_config_file}")
+                log_progress "Processing ${num_slices} slices from configuration"
+                
+                for i in $(seq 0 $((num_slices - 1))); do
+                    local slice_name=$(jq -r ".slices[$i].name" "${split_config_file}")
+                    local min_lon=$(jq -r ".slices[$i].minLongitude" "${split_config_file}")
+                    local max_lon=$(jq -r ".slices[$i].maxLongitude" "${split_config_file}")
+                    
+                    log_progress "Processing ${slice_name}: lon(${min_lon},${max_lon})"
+                    
+                    # Extract slice using osmium
+                    local slice_file="${OSRM_DATA_DIR}/${slice_name}.osm.pbf"
+                    
+                    # Handle dateline wrapping (when max < min, like slice_a: 116.5 to -98.5)
+                    if (( $(echo "${max_lon} < ${min_lon}" | bc -l) )); then
+                        log_progress "${slice_name} crosses dateline, extracting in two parts"
+                        
+                        # Extract part 1: min_lon to 180
+                        local part1="${OSRM_DATA_DIR}/${slice_name}_part1.osm.pbf"
+                        osmium extract \
+                            --bbox "${min_lon},${osm_min_lat},180,${osm_max_lat}" \
+                            -o "${part1}" \
+                            "${osm_local_file}" || handle_error "Failed to extract ${slice_name} part 1"
+                        
+                        # Extract part 2: -180 to max_lon
+                        local part2="${OSRM_DATA_DIR}/${slice_name}_part2.osm.pbf"
+                        osmium extract \
+                            --bbox "-180,${osm_min_lat},${max_lon},${osm_max_lat}" \
+                            -o "${part2}" \
+                            "${osm_local_file}" || handle_error "Failed to extract ${slice_name} part 2"
+                        
+                        # Merge the two parts
+                        osmium merge "${part1}" "${part2}" -o "${slice_file}" || handle_error "Failed to merge ${slice_name} parts"
+                        rm -f "${part1}" "${part2}"
+                    else
+                        osmium extract \
+                            --bbox "${min_lon},${osm_min_lat},${max_lon},${osm_max_lat}" \
+                            -o "${slice_file}" \
+                            "${osm_local_file}" || handle_error "Failed to extract ${slice_name}"
+                    fi
+                    
+                    # Run OSRM pipeline on slice
+                    log_progress "Running osrm-extract on ${slice_name}"
+                    /usr/local/bin/osrm-extract \
+                        "${slice_file}" \
+                        --profile "${profile_path}" \
+                        --threads "$(nproc)" \
+                        ${EXTRACT_EXTRA_ARGS:-} || handle_error "osrm-extract failed for ${slice_name}"
+                    
+                    log_progress "Running osrm-partition on ${slice_name}"
+                    /usr/local/bin/osrm-partition \
+                        "${OSRM_DATA_DIR}/${slice_name}.osrm" \
+                        --threads "$(nproc)" \
+                        ${PARTITION_EXTRA_ARGS:-} || handle_error "osrm-partition failed for ${slice_name}"
+                    
+                    log_progress "Running osrm-customize on ${slice_name}"
+                    /usr/local/bin/osrm-customize \
+                        "${OSRM_DATA_DIR}/${slice_name}.osrm" \
+                        --threads "$(nproc)" \
+                        ${CUSTOMIZE_EXTRA_ARGS:-} || handle_error "osrm-customize failed for ${slice_name}"
+                    
+                    # Upload all OSRM files for this slice
+                    log_progress "Uploading ${slice_name} files to S3"
+                    for ext in osrm osrm.names osrm.restrictions osrm.maneuver_overrides osrm.turn_weight_penalties osrm.turn_duration_penalties osrm.datasource_names osrm.partition osrm.cells osrm.cell_metrics osrm.mld; do
+                        if [[ -f "${OSRM_DATA_DIR}/${slice_name}.${ext}" ]]; then
+                            upload_s3_file "${OSRM_DATA_DIR}/${slice_name}.${ext}" "${OSRM_OUTPUT_DIR}/${slice_name}.${ext}"
+                        fi
+                    done
+                    
+                    # Clean up slice files to save space
+                    rm -f "${slice_file}" "${OSRM_DATA_DIR}/${slice_name}."*
+                done
+                
+                log_progress "All ${num_slices} slices processed successfully"
+            else
+                log_progress "No split config, processing as single file"
+                local base_name=$(basename ${osm_local_file%.*})
+                
+                # Extract
+                log_progress "Running osrm-extract with profile ${PROFILE}"
+                /usr/local/bin/osrm-extract \
+                    "${osm_local_file}" \
+                    --profile "${profile_path}" \
+                    --threads "$(nproc)" \
+                    ${EXTRACT_EXTRA_ARGS:-} || handle_error "osrm-extract failed"
+                
+                # Partition
+                log_progress "Running osrm-partition"
+                /usr/local/bin/osrm-partition \
+                    "${OSRM_DATA_DIR}/${base_name}.osrm" \
+                    --threads "$(nproc)" \
+                    ${PARTITION_EXTRA_ARGS:-} || handle_error "osrm-partition failed"
+                
+                # Customize
+                log_progress "Running osrm-customize"
+                /usr/local/bin/osrm-customize \
+                    "${OSRM_DATA_DIR}/${base_name}.osrm" \
+                    --threads "$(nproc)" \
+                    ${CUSTOMIZE_EXTRA_ARGS:-} || handle_error "osrm-customize failed"
+                
+                # Upload all OSRM files
+                log_progress "Uploading files to S3"
+                for ext in osrm osrm.names osrm.restrictions osrm.maneuver_overrides osrm.turn_weight_penalties osrm.turn_duration_penalties osrm.datasource_names osrm.partition osrm.cells osrm.cell_metrics osrm.mld; do
+                    if [[ -f "${OSRM_DATA_DIR}/${base_name}.${ext}" ]]; then
+                        upload_s3_file "${OSRM_DATA_DIR}/${base_name}.${ext}" "${OSRM_OUTPUT_DIR}/${base_name}.${ext}"
+                    fi
+                done
+            fi
             ;;
             
         *)
