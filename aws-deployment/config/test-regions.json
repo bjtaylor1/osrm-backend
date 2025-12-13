@@ -1,0 +1,66 @@
+{
+  "test_regions": [
+    {
+      "name": "slice_a_monaco",
+      "url": "http://download.geofabrik.de/europe/monaco-latest.osm.pbf",
+      "description": "Monaco - 2 km²"
+    },
+    {
+      "name": "slice_b_liechtenstein",
+      "url": "http://download.geofabrik.de/europe/liechtenstein-latest.osm.pbf",
+      "description": "Liechtenstein - 160 km²"
+    },
+    {
+      "name": "slice_c_malta",
+      "url": "http://download.geofabrik.de/europe/malta-latest.osm.pbf",
+      "description": "Malta - 316 km²"
+    },
+    {
+      "name": "slice_d_delaware",
+      "url": "http://download.geofabrik.de/north-america/us/delaware-latest.osm.pbf",
+      "description": "Delaware, USA - 5,328 km²"
+    },
+    {
+      "name": "slice_e_rhode_island",
+      "url": "http://download.geofabrik.de/north-america/us/rhode-island-latest.osm.pbf",
+      "description": "Rhode Island, USA - 3,144 km²"
+    },
+    {
+      "name": "slice_f_luxembourg",
+      "url": "http://download.geofabrik.de/europe/luxembourg-latest.osm.pbf",
+      "description": "Luxembourg - 2,586 km²"
+    }
+  ],
+  "production_slices": [
+    {
+      "name": "slice_a_north_america",
+      "bbox": "-170,15,-50,75",
+      "description": "North America"
+    },
+    {
+      "name": "slice_b_south_america",
+      "bbox": "-85,-60,-30,15",
+      "description": "South America"
+    },
+    {
+      "name": "slice_c_europe_africa",
+      "bbox": "-25,30,60,75",
+      "description": "Europe + North Africa"
+    },
+    {
+      "name": "slice_d_africa",
+      "bbox": "-20,-35,55,30",
+      "description": "Sub-Saharan Africa"
+    },
+    {
+      "name": "slice_e_asia",
+      "bbox": "60,-15,180,75",
+      "description": "Asia + Middle East"
+    },
+    {
+      "name": "slice_f_oceania",
+      "bbox": "110,-50,180,-10",
+      "description": "Oceania"
+    }
+  ]
+}

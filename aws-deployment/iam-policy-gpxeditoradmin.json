@@ -1,0 +1,199 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "S3Access",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:ListBucket",
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:GetBucketLocation",
+        "s3:ListAllMyBuckets"
+      ],
+      "Resource": [
+        "arn:aws:s3:::*osrm*",
+        "arn:aws:s3:::*osrm*/*"
+      ]
+    },
+    {
+      "Sid": "ECRAccess",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetAuthorizationToken",
+        "ecr:CreateRepository",
+        "ecr:DescribeRepositories",
+        "ecr:PutImage",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchGetImage",
+        "ecr:PutLifecyclePolicy",
+        "ecr:PutImageScanningConfiguration"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BatchJobManagement",
+      "Effect": "Allow",
+      "Action": [
+        "batch:SubmitJob",
+        "batch:DescribeJobs",
+        "batch:ListJobs",
+        "batch:TerminateJob",
+        "batch:CancelJob",
+        "batch:DescribeJobQueues",
+        "batch:DescribeJobDefinitions",
+        "batch:DescribeComputeEnvironments",
+        "batch:RegisterJobDefinition",
+        "batch:DeregisterJobDefinition"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BatchInfrastructureSetup",
+      "Effect": "Allow",
+      "Action": [
+        "batch:CreateComputeEnvironment",
+        "batch:UpdateComputeEnvironment",
+        "batch:DeleteComputeEnvironment",
+        "batch:CreateJobQueue",
+        "batch:UpdateJobQueue",
+        "batch:DeleteJobQueue"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "IAMRoleCreation",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:AttachRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:GetRole",
+        "iam:PassRole",
+        "iam:CreateInstanceProfile",
+        "iam:AddRoleToInstanceProfile",
+        "iam:GetInstanceProfile",
+        "iam:ListInstanceProfiles",
+        "iam:ListRoles",
+        "iam:CreateServiceLinkedRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:role/AWSBatch*",
+        "arn:aws:iam::*:role/ecsInstance*",
+        "arn:aws:iam::*:role/osrm*",
+        "arn:aws:iam::*:role/aws-service-role/batch.amazonaws.com/*",
+        "arn:aws:iam::*:instance-profile/*"
+      ]
+    },
+    {
+      "Sid": "EC2ForBatchAndServer",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:RunInstances",
+        "ec2:TerminateInstances",
+        "ec2:DescribeInstances",
+        "ec2:DescribeInstanceStatus",
+        "ec2:DescribeImages",
+        "ec2:DescribeKeyPairs",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeVpcs",
+        "ec2:DescribeAvailabilityZones",
+        "ec2:CreateTags",
+        "ec2:DescribeInstanceAttribute",
+        "ec2:DescribeInstanceTypes",
+        "ec2:DescribeVolumes",
+        "ec2:CreateVolume",
+        "ec2:AttachVolume",
+        "ec2:ModifyInstanceAttribute"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "EC2NetworkingForBatch",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateSecurityGroup",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:CreateNetworkInterface",
+        "ec2:DeleteNetworkInterface",
+        "ec2:AttachNetworkInterface",
+        "ec2:ModifyNetworkInterfaceAttribute"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AutoScalingForBatch",
+      "Effect": "Allow",
+      "Action": [
+        "autoscaling:CreateLaunchConfiguration",
+        "autoscaling:DeleteLaunchConfiguration",
+        "autoscaling:DescribeLaunchConfigurations",
+        "autoscaling:CreateAutoScalingGroup",
+        "autoscaling:UpdateAutoScalingGroup",
+        "autoscaling:DeleteAutoScalingGroup",
+        "autoscaling:DescribeAutoScalingGroups",
+        "autoscaling:SetDesiredCapacity",
+        "autoscaling:TerminateInstanceInAutoScalingGroup"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ECSForBatch",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:CreateCluster",
+        "ecs:DeleteCluster",
+        "ecs:DescribeClusters",
+        "ecs:DescribeContainerInstances",
+        "ecs:ListClusters",
+        "ecs:ListContainerInstances",
+        "ecs:RegisterTaskDefinition",
+        "ecs:DeregisterTaskDefinition"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "LogsAccess",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "STSAccess",
+      "Effect": "Allow",
+      "Action": [
+        "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "EventBridgeForScheduling",
+      "Effect": "Allow",
+      "Action": [
+        "events:PutRule",
+        "events:PutTargets",
+        "events:DescribeRule",
+        "events:DeleteRule",
+        "events:RemoveTargets"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

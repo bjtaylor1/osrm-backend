@@ -1,0 +1,84 @@
+# Production OSRM Server Dockerfile
+# This runs multiple OSRM instances with nginx routing
+
+FROM ubuntu:22.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies
+RUN apt-get update && \
+    apt-get install -y \
+        build-essential \
+        git \
+        cmake \
+        pkg-config \
+        libboost-all-dev \
+        libbz2-dev \
+        liblua5.4-dev \
+        libtbb-dev \
+        libxml2-dev \
+        libzip-dev \
+        lua5.4 \
+        wget \
+        ca-certificates
+
+# Clone and build OSRM
+WORKDIR /tmp
+RUN git clone https://github.com/bjtaylor1/osrm-backend.git && \
+    cd osrm-backend && \
+    mkdir build && \
+    cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_LTO=On && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && \
+    rm -rf /tmp/osrm-backend
+
+# Production stage
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y \
+        libboost-filesystem1.74.0 \
+        libboost-iostreams1.74.0 \
+        libboost-program-options1.74.0 \
+        libboost-thread1.74.0 \
+        liblua5.4-0 \
+        libtbb12 \
+        nginx \
+        supervisor \
+        curl \
+        awscli \
+        jq && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy OSRM binaries from builder
+COPY --from=builder /usr/local/bin/osrm-* /usr/local/bin/
+COPY --from=builder /usr/local/lib/libosrm* /usr/local/lib/
+RUN ldconfig
+
+# Create directories
+RUN mkdir -p /opt/osrm/{data,logs} /etc/supervisor/conf.d
+
+# Copy configurations
+COPY config/nginx.conf /etc/nginx/sites-available/osrm
+COPY config/osrm-supervisor.conf /etc/supervisor/conf.d/osrm.conf
+COPY scripts/start-osrm.sh /usr/local/bin/start-osrm.sh
+
+RUN chmod +x /usr/local/bin/start-osrm.sh && \
+    ln -sf /etc/nginx/sites-available/osrm /etc/nginx/sites-enabled/osrm && \
+    rm -f /etc/nginx/sites-enabled/default
+
+# Expose nginx port
+EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
+
+WORKDIR /opt/osrm
+
+CMD ["/usr/local/bin/start-osrm.sh"]

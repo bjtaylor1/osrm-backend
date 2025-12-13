@@ -1,0 +1,435 @@
+# OSRM AWS Batch Dockerfile
+# Optimized for compilation and batch processing on AWS Batch
+FROM debian:bookworm-slim AS builder
+
+ARG DOCKER_TAG=aws-batch
+ARG BUILD_CONCURRENCY
+ARG CMAKE_BUILD_TYPE=Release
+ARG ENABLE_ASSERTIONS=Off
+
+# Install build dependencies
+RUN mkdir -p /src /opt && \
+    apt-get update && \
+    apt-get -y --no-install-recommends --no-install-suggests install \
+        ca-certificates \
+        cmake \
+        g++ \
+        gcc \
+        git \
+        libboost1.81-all-dev \
+        libbz2-dev \
+        liblua5.4-dev \
+        libtbb-dev \
+        libxml2-dev \
+        libzip-dev \
+        lua5.4 \
+        make \
+        pkg-config \
+        curl \
+        wget && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy source code
+COPY . /src
+WORKDIR /src
+
+    # Build OSRM with optimizations for batch processing
+RUN NPROC=${BUILD_CONCURRENCY:-$(nproc)} && \
+    export CXXFLAGS="-Wno-array-bounds -Wno-uninitialized -Wno-stringop-overflow -O3 -march=x86-64 -mtune=generic" && \
+    echo "Building OSRM ${DOCKER_TAG} for AWS Batch" && \
+    git show --format="%H" | head -n1 > /opt/OSRM_GITSHA && \
+    echo "Building OSRM gitsha $(cat /opt/OSRM_GITSHA)" && \
+    mkdir -p build && \
+    cd build && \
+    echo "Building ${CMAKE_BUILD_TYPE} with ENABLE_ASSERTIONS=${ENABLE_ASSERTIONS}" && \
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+        -DENABLE_ASSERTIONS=${ENABLE_ASSERTIONS} \
+        -DENABLE_LTO=Off \
+        -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG -march=x86-64" \
+        -DCMAKE_EXE_LINKER_FLAGS="-s" && \
+    make -j2 install && \
+    cd ../profiles && \
+    cp -r * /opt && \
+    strip /usr/local/bin/* && \
+    rm -rf /src# Multi-stage build for production image
+FROM debian:bookworm-slim AS production
+
+# Install runtime dependencies and AWS CLI
+RUN apt-get update && \
+    apt-get install -y \
+        expat \
+        libboost-date-time1.81.0 \
+        libboost-iostreams1.81.0 \
+        libboost-program-options1.81.0 \
+        libboost-thread1.81.0 \
+        liblua5.4-0 \
+        libtbb12 \
+        curl \
+        wget \
+        jq \
+        awscli \
+        ca-certificates \
+        procps \
+        htop \
+        rsync \
+        osmium-tool && \
+    rm -rf /var/lib/apt/lists/* && \
+    ldconfig /usr/local/lib
+
+# Copy OSRM binaries and profiles from builder
+COPY --from=builder /usr/local /usr/local
+COPY --from=builder /opt /opt
+
+# Create working directories
+RUN mkdir -p /data /output /scripts /logs
+
+# Set up environment variables for AWS Batch
+ENV OSRM_DATA_DIR=/data
+ENV OSRM_OUTPUT_DIR=/output
+ENV OSRM_LOG_DIR=/logs
+ENV MALLOC_MMAP_THRESHOLD_=1048576
+ENV MALLOC_TRIM_THRESHOLD_=134217728
+
+# Create entrypoint script for AWS Batch
+RUN cat > /scripts/entrypoint.sh << 'EOF'
+#!/bin/bash
+set -euo pipefail
+
+# Logging setup
+exec > >(tee -a ${OSRM_LOG_DIR}/osrm-batch.log) 2>&1
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting OSRM AWS Batch processing"
+echo "Container ID: ${HOSTNAME}"
+echo "AWS Region: ${AWS_DEFAULT_REGION}"
+echo "Data directory: ${OSRM_DATA_DIR}"
+echo "Output directory: ${OSRM_OUTPUT_DIR}"
+
+# Function to handle errors
+handle_error() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: $1" >&2
+    exit 1
+}
+
+# Function to log progress
+log_progress() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
+}
+
+# Function to download from S3, HTTP, or local file
+download_s3_file() {
+    local s3_path="$1"
+    local local_path="$2"
+    
+    if [[ "$s3_path" == s3://* ]]; then
+        log_progress "Downloading $s3_path to $local_path"
+        aws s3 cp "$s3_path" "$local_path" || handle_error "Failed to download $s3_path"
+    elif [[ "$s3_path" == http://* ]] || [[ "$s3_path" == https://* ]]; then
+        log_progress "Downloading $s3_path to $local_path"
+        wget -O "$local_path" "$s3_path" || handle_error "Failed to download $s3_path"
+    else
+        log_progress "Using local file: $s3_path"
+        cp "$s3_path" "$local_path" || handle_error "Failed to copy $s3_path"
+    fi
+}
+
+# Function to upload to S3 if needed
+upload_s3_file() {
+    local local_path="$1"
+    local s3_path="$2"
+    
+    if [[ "$s3_path" == s3://* ]]; then
+        log_progress "Uploading $local_path to $s3_path"
+        aws s3 cp "$local_path" "$s3_path" || handle_error "Failed to upload to $s3_path"
+    else
+        log_progress "Copying to local destination: $s3_path"
+        cp "$local_path" "$s3_path" || handle_error "Failed to copy to $s3_path"
+    fi
+}
+
+# Validate required environment variables based on operation
+validate_env_vars() {
+    case "${OSRM_OPERATION:-}" in
+        extract)
+            [[ -n "${OSM_FILE:-}" ]] || handle_error "OSM_FILE is required for extract operation"
+            [[ -n "${PROFILE:-}" ]] || handle_error "PROFILE is required for extract operation"
+            ;;
+        contract|partition|customize)
+            [[ -n "${OSRM_FILE:-}" ]] || handle_error "OSRM_FILE is required for ${OSRM_OPERATION} operation"
+            ;;
+        routed)
+            [[ -n "${OSRM_FILE:-}" ]] || handle_error "OSRM_FILE is required for routed operation"
+            ;;
+        *)
+            handle_error "Unknown or missing OSRM_OPERATION: ${OSRM_OPERATION:-}"
+            ;;
+    esac
+}
+
+# Main processing function
+main() {
+    validate_env_vars
+    
+    log_progress "Starting ${OSRM_OPERATION} operation"
+    
+    case "${OSRM_OPERATION}" in
+        extract)
+            local osm_local_file="${OSRM_DATA_DIR}/input.osm.pbf"
+            local profile_path="/opt/${PROFILE}.lua"
+            local output_file="${OSRM_OUTPUT_DIR}/$(basename ${OSM_FILE%.*}).osrm"
+            
+            # Download OSM file
+            download_s3_file "${OSM_FILE}" "${osm_local_file}"
+            
+            # Validate profile exists
+            [[ -f "${profile_path}" ]] || handle_error "Profile ${PROFILE}.lua not found"
+            
+            # Run extract
+            log_progress "Running osrm-extract with profile ${PROFILE}"
+            /usr/local/bin/osrm-extract \
+                "${osm_local_file}" \
+                --profile "${profile_path}" \
+                --threads "$(nproc)" \
+                ${EXTRACT_EXTRA_ARGS:-} || handle_error "osrm-extract failed"
+            
+            # Upload results
+            local base_name=$(basename ${osm_local_file%.*})
+            for ext in osrm osrm.names osrm.restrictions osrm.maneuver_overrides osrm.turn_weight_penalties osrm.turn_duration_penalties osrm.datasource_names; do
+                if [[ -f "${OSRM_DATA_DIR}/${base_name}.${ext}" ]]; then
+                    upload_s3_file "${OSRM_DATA_DIR}/${base_name}.${ext}" "${OSRM_OUTPUT_DIR}/${base_name}.${ext}"
+                fi
+            done
+            ;;
+            
+        contract)
+            local osrm_local_file="${OSRM_DATA_DIR}/input.osrm"
+            
+            # Download OSRM file
+            download_s3_file "${OSRM_FILE}" "${osrm_local_file}"
+            
+            # Run contract
+            log_progress "Running osrm-contract"
+            /usr/local/bin/osrm-contract \
+                "${osrm_local_file}" \
+                --threads "$(nproc)" \
+                ${CONTRACT_EXTRA_ARGS:-} || handle_error "osrm-contract failed"
+            
+            # Upload results
+            local base_name=$(basename ${osrm_local_file%.*})
+            for ext in osrm.hsgr osrm.level osrm.core; do
+                if [[ -f "${OSRM_DATA_DIR}/${base_name}.${ext}" ]]; then
+                    upload_s3_file "${OSRM_DATA_DIR}/${base_name}.${ext}" "${OSRM_OUTPUT_DIR}/${base_name}.${ext}"
+                fi
+            done
+            ;;
+            
+        partition)
+            local osrm_local_file="${OSRM_DATA_DIR}/input.osrm"
+            
+            # Download OSRM file
+            download_s3_file "${OSRM_FILE}" "${osrm_local_file}"
+            
+            # Run partition
+            log_progress "Running osrm-partition"
+            /usr/local/bin/osrm-partition \
+                "${osrm_local_file}" \
+                --threads "$(nproc)" \
+                ${PARTITION_EXTRA_ARGS:-} || handle_error "osrm-partition failed"
+            
+            # Upload results
+            local base_name=$(basename ${osrm_local_file%.*})
+            for ext in osrm.partition osrm.cells; do
+                if [[ -f "${OSRM_DATA_DIR}/${base_name}.${ext}" ]]; then
+                    upload_s3_file "${OSRM_DATA_DIR}/${base_name}.${ext}" "${OSRM_OUTPUT_DIR}/${base_name}.${ext}"
+                fi
+            done
+            ;;
+            
+        customize)
+            local osrm_local_file="${OSRM_DATA_DIR}/input.osrm"
+            
+            # Download OSRM file and all required files
+            download_s3_file "${OSRM_FILE}" "${osrm_local_file}"
+            
+            # Download related files (partition, cells, etc.)
+            local base_name=$(basename ${osrm_local_file%.*})
+            for ext in partition cells; do
+                if [[ -n "${OSRM_FILE_BASE:-}" ]]; then
+                    download_s3_file "${OSRM_FILE_BASE}.osrm.${ext}" "${OSRM_DATA_DIR}/${base_name}.osrm.${ext}"
+                fi
+            done
+            
+            # Run customize
+            log_progress "Running osrm-customize"
+            /usr/local/bin/osrm-customize \
+                "${osrm_local_file}" \
+                --threads "$(nproc)" \
+                ${CUSTOMIZE_EXTRA_ARGS:-} || handle_error "osrm-customize failed"
+            
+            # Upload results
+            for ext in osrm.cell_metrics osrm.mld; do
+                if [[ -f "${OSRM_DATA_DIR}/${base_name}.${ext}" ]]; then
+                    upload_s3_file "${OSRM_DATA_DIR}/${base_name}.${ext}" "${OSRM_OUTPUT_DIR}/${base_name}.${ext}"
+                fi
+            done
+            ;;
+            
+        routed)
+            local osrm_local_file="${OSRM_DATA_DIR}/input.osrm"
+            
+            # Download OSRM file and all required files
+            download_s3_file "${OSRM_FILE}" "${osrm_local_file}"
+            
+            # Download all related files
+            local base_name=$(basename ${osrm_local_file%.*})
+            if [[ -n "${OSRM_FILE_BASE:-}" ]]; then
+                for ext in names restrictions maneuver_overrides turn_weight_penalties turn_duration_penalties datasource_names hsgr level core partition cells cell_metrics mld; do
+                    local s3_file="${OSRM_FILE_BASE}.osrm.${ext}"
+                    local local_file="${OSRM_DATA_DIR}/${base_name}.osrm.${ext}"
+                    if aws s3 ls "$s3_file" >/dev/null 2>&1; then
+                        download_s3_file "$s3_file" "$local_file"
+                    fi
+                done
+            fi
+            
+            # Start OSRM routed
+            log_progress "Starting osrm-routed server"
+            /usr/local/bin/osrm-routed \
+                "${osrm_local_file}" \
+                --ip 0.0.0.0 \
+                --port "${OSRM_PORT:-5000}" \
+                --threads "$(nproc)" \
+                ${ROUTED_EXTRA_ARGS:-} || handle_error "osrm-routed failed"
+            ;;
+            
+        *)
+            handle_error "Unknown operation: ${OSRM_OPERATION}"
+            ;;
+    esac
+    
+    log_progress "Operation ${OSRM_OPERATION} completed successfully"
+}
+
+# Execute main function
+main "$@"
+EOF
+
+# Make entrypoint executable
+RUN chmod +x /scripts/entrypoint.sh
+
+# Create helper script for common batch operations
+RUN cat > /scripts/osrm-batch.sh << 'EOF'
+#!/bin/bash
+# Helper script for common OSRM batch operations
+
+set -euo pipefail
+
+show_help() {
+    cat << 'HELP'
+OSRM AWS Batch Helper Script
+
+Usage: osrm-batch.sh <operation> [options]
+
+Operations:
+  extract       Extract data from OSM file
+  contract      Contract the graph
+  partition     Partition the graph
+  customize     Customize the graph
+  routed        Start OSRM routing server
+  pipeline      Run complete pipeline (extract -> partition -> customize)
+
+Environment Variables:
+  OSRM_OPERATION    - Operation to perform
+  OSM_FILE          - S3 path or local path to OSM file (for extract)
+  OSRM_FILE         - S3 path or local path to OSRM file
+  OSRM_FILE_BASE    - S3 path base for related files (without extension)
+  PROFILE           - Profile name (car, bicycle, foot, etc.)
+  OSRM_PORT         - Port for routed operation (default: 5000)
+  
+  Additional args can be passed via:
+  EXTRACT_EXTRA_ARGS, CONTRACT_EXTRA_ARGS, PARTITION_EXTRA_ARGS,
+  CUSTOMIZE_EXTRA_ARGS, ROUTED_EXTRA_ARGS
+
+Examples:
+  # Extract Monaco data
+  OSRM_OPERATION=extract OSM_FILE=s3://my-bucket/monaco.osm.pbf PROFILE=car ./osrm-batch.sh extract
+  
+  # Run complete pipeline
+  OSM_FILE=s3://my-bucket/data.osm.pbf PROFILE=car ./osrm-batch.sh pipeline
+  
+  # Start routing server
+  OSRM_OPERATION=routed OSRM_FILE=s3://my-bucket/data.osrm ./osrm-batch.sh routed
+
+HELP
+}
+
+run_pipeline() {
+    local osm_file="${1:-${OSM_FILE}}"
+    local profile="${2:-${PROFILE:-car}}"
+    
+    [[ -n "$osm_file" ]] || { echo "Error: OSM file required for pipeline"; exit 1; }
+    
+    local base_name=$(basename "${osm_file%.*}")
+    local temp_base="${OSRM_OUTPUT_DIR}/${base_name}"
+    
+    echo "Running complete OSRM pipeline for ${osm_file} with ${profile} profile"
+    
+    # Extract
+    OSRM_OPERATION=extract OSM_FILE="$osm_file" PROFILE="$profile" /scripts/entrypoint.sh
+    
+    # Contract (skip for MLD)
+    if [[ "${ALGORITHM:-CH}" == "CH" ]]; then
+        OSRM_OPERATION=contract OSRM_FILE="${temp_base}.osrm" /scripts/entrypoint.sh
+    else
+        # MLD pipeline
+        OSRM_OPERATION=partition OSRM_FILE="${temp_base}.osrm" /scripts/entrypoint.sh
+        OSRM_OPERATION=customize OSRM_FILE="${temp_base}.osrm" OSRM_FILE_BASE="${temp_base}" /scripts/entrypoint.sh
+    fi
+    
+    echo "Pipeline completed successfully"
+}
+
+case "${1:-}" in
+    extract|contract|partition|customize|routed)
+        OSRM_OPERATION="$1" /scripts/entrypoint.sh
+        ;;
+    pipeline)
+        run_pipeline "${2:-}" "${3:-}"
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        echo "Error: Unknown operation '${1:-}'"
+        show_help
+        exit 1
+        ;;
+esac
+EOF
+
+RUN chmod +x /scripts/osrm-batch.sh
+
+# Test that OSRM binaries work
+RUN /usr/local/bin/osrm-extract --help && \
+    /usr/local/bin/osrm-routed --help && \
+    /usr/local/bin/osrm-contract --help && \
+    /usr/local/bin/osrm-partition --help && \
+    /usr/local/bin/osrm-customize --help
+
+# Set working directory
+WORKDIR /opt
+
+# Health check for when running as a service
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:${OSRM_PORT:-5000}/health || exit 1
+
+# Default to the batch entrypoint
+ENTRYPOINT ["/scripts/entrypoint.sh"]
+
+# Expose default OSRM port
+EXPOSE 5000
+
+# Add labels for better container management
+LABEL maintainer="OSRM AWS Batch"
+LABEL version="1.0"
+LABEL description="OSRM Backend optimized for AWS Batch processing"
+LABEL org.opencontainers.image.source="https://github.com/Project-OSRM/osrm-backend"
