@@ -432,4 +432,4 @@ EXPOSE 5000
 LABEL maintainer="OSRM AWS Batch"
 LABEL version="1.0"
 LABEL description="OSRM Backend optimized for AWS Batch processing"
-LABEL org.opencontainers.image.source="https://github.com/Project-OSRM/osrm-backend"
+LABEL org.opencontainers.image.source="https://github.com/bjtaylor1/osrm-backend"
