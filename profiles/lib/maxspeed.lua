@@ -1,8 +1,8 @@
 local math = math
 
-local MaxSpeed = {}
+module "MaxSpeed"
 
-function MaxSpeed.limit(way,max,maxf,maxb)
+function limit(way,max,maxf,maxb)
   if maxf and maxf>0 then
     way.forward_speed = math.min(way.forward_speed, maxf)
   elseif max and max>0 then
@@ -15,5 +15,3 @@ function MaxSpeed.limit(way,max,maxf,maxb)
     way.backward_speed = math.min(way.backward_speed, max)
   end
 end
-
-return MaxSpeed
