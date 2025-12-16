@@ -1,7 +1,7 @@
 
-module "SurfaceWhitelist"
+local SurfaceWhitelist = {}
 
-whitelist_ways_by_id = {
+SurfaceWhitelist.whitelist_ways_by_id = {
 --doddington road cut through
 [445642019] = true,
 
@@ -159,3 +159,5 @@ whitelist_ways_by_id = {
 [126404853] = true,
 [28284766] = true
 }
+
+return SurfaceWhitelist

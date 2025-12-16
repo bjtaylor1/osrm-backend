@@ -1,8 +1,8 @@
 local ipairs = ipairs
 
-module "Access"
+local Access = {}
 
-function find_access_tag(source,access_tags_hierachy)
+function Access.find_access_tag(source,access_tags_hierachy)
     for i,v in ipairs(access_tags_hierachy) do
         local tag = source:get_value_by_key(v)
         if tag ~= '' then
@@ -11,3 +11,5 @@ function find_access_tag(source,access_tags_hierachy)
     end
     return nil
 end
+
+return Access

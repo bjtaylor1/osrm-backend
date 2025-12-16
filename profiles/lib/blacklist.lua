@@ -1,7 +1,7 @@
 
-module "Blacklist"
+local Blacklist = {}
 
-blacklist_ways_by_id = {
+Blacklist.blacklist_ways_by_id = {
 --A15 near humber bridge:
  [203935360] = true,
  [3996812] = true,
@@ -36,3 +36,4 @@ blacklist_ways_by_id = {
  [64295556] = true
 }
 
+return Blacklist
