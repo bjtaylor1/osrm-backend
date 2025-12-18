@@ -7,7 +7,7 @@ Sequence = require('lib/sequence')
 Handlers = require("lib/way_handlers")
 find_access_tag = require("lib/access").find_access_tag
 limit = require("lib/maxspeed").limit
-require("lib/surfacewhitelist")
+SurfaceWhitelist = require("lib/surfacewhitelist")
 
 function setup()
 
@@ -212,6 +212,21 @@ function setup()
       mud = 0,
       sand = 0,
       sett = 0
+    },
+
+    assumed_surfaced_highways = Set {
+      'trunk',
+      'trunk_link',
+      'primary',
+      'primary_link',
+      'secondary',
+      'secondary_link',
+      'tertiary',
+      'tertiary_link',
+      'residential',
+      'unclassified',
+      'living_street',
+      'road',
     },
 
     classes = Sequence {
