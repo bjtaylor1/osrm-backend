@@ -170,7 +170,7 @@ validate_env_vars() {
             echo "  ✓ OSM_FILE: ${OSM_FILE}"
             echo "  ✓ PROFILE: ${PROFILE}"
             ;;
-        contract|partition|customize)
+        contract)
             [[ -n "${OSRM_FILE:-}" ]] || handle_error "OSRM_FILE is required for ${OSRM_OPERATION} operation" $LINENO
             echo "  ✓ OSRM_FILE: ${OSRM_FILE}"
             ;;
@@ -190,7 +190,7 @@ validate_env_vars() {
             # No validation needed for help
             ;;
         *)
-            handle_error "Unknown or missing OSRM_OPERATION: '${OSRM_OPERATION:-}'. Valid operations: extract, contract, partition, customize, pipeline, routed, help" $LINENO
+            handle_error "Unknown or missing OSRM_OPERATION: '${OSRM_OPERATION:-}'. Valid operations: extract, contract, pipeline, routed, help" $LINENO
             ;;
     esac
     
@@ -253,58 +253,7 @@ main() {
                 fi
             done
             ;;
-            
-        partition)
-            local osrm_local_file="${OSRM_DATA_DIR}/input.osrm"
-            
-            # Download OSRM file
-            download_s3_file "${OSRM_FILE}" "${osrm_local_file}"
-            
-            # Run partition
-            log_progress "Running osrm-partition"
-            /usr/local/bin/osrm-partition \
-                "${osrm_local_file}" \
-                --threads "$(nproc)" \
-                ${PARTITION_EXTRA_ARGS:-} || handle_error "osrm-partition failed"
-            
-            # Upload results
-            local base_name=$(basename ${osrm_local_file%.*})
-            for ext in osrm.partition osrm.cells; do
-                if [[ -f "${OSRM_DATA_DIR}/${base_name}.${ext}" ]]; then
-                    upload_s3_file "${OSRM_DATA_DIR}/${base_name}.${ext}" "${OSRM_OUTPUT_DIR}/${base_name}.${ext}"
-                fi
-            done
-            ;;
-            
-        customize)
-            local osrm_local_file="${OSRM_DATA_DIR}/input.osrm"
-            
-            # Download OSRM file and all required files
-            download_s3_file "${OSRM_FILE}" "${osrm_local_file}"
-            
-            # Download related files (partition, cells, etc.)
-            local base_name=$(basename ${osrm_local_file%.*})
-            for ext in partition cells; do
-                if [[ -n "${OSRM_FILE_BASE:-}" ]]; then
-                    download_s3_file "${OSRM_FILE_BASE}.osrm.${ext}" "${OSRM_DATA_DIR}/${base_name}.osrm.${ext}"
-                fi
-            done
-            
-            # Run customize
-            log_progress "Running osrm-customize"
-            /usr/local/bin/osrm-customize \
-                "${osrm_local_file}" \
-                --threads "$(nproc)" \
-                ${CUSTOMIZE_EXTRA_ARGS:-} || handle_error "osrm-customize failed"
-            
-            # Upload results
-            for ext in osrm.cell_metrics osrm.mld; do
-                if [[ -f "${OSRM_DATA_DIR}/${base_name}.${ext}" ]]; then
-                    upload_s3_file "${OSRM_DATA_DIR}/${base_name}.${ext}" "${OSRM_OUTPUT_DIR}/${base_name}.${ext}"
-                fi
-            done
-            ;;
-            
+
         routed)
             local osrm_local_file="${OSRM_DATA_DIR}/input.osrm"
             
@@ -343,10 +292,8 @@ main() {
             echo ""
             echo "Available Operations:"
             echo "  extract   - Extract routing data from OSM file"
-            echo "  partition - Partition the routing graph (MLD)"
-            echo "  customize - Customize the routing graph (MLD)"
             echo "  contract  - Contract the routing graph (CH)"
-            echo "  pipeline  - Complete pipeline (download → split if needed → extract → partition → customize → upload)"
+            echo "  pipeline  - Complete pipeline (download → split if needed → extract → contract → upload)"
             echo "  routed    - Start OSRM routing server"
             echo ""
             echo "Available OSRM Tools:"
@@ -436,17 +383,11 @@ main() {
                         --threads "$(nproc)" \
                         ${EXTRACT_EXTRA_ARGS:-} || handle_error "osrm-extract failed for ${slice_name}"
                     
-                    log_progress "Running osrm-partition on ${slice_name}"
-                    /usr/local/bin/osrm-partition \
+                    log_progress "Running osrm-contract on ${slice_name}"
+                    /usr/local/bin/osrm-contract \
                         "${OSRM_DATA_DIR}/${slice_name}.osrm" \
                         --threads "$(nproc)" \
-                        ${PARTITION_EXTRA_ARGS:-} || handle_error "osrm-partition failed for ${slice_name}"
-                    
-                    log_progress "Running osrm-customize on ${slice_name}"
-                    /usr/local/bin/osrm-customize \
-                        "${OSRM_DATA_DIR}/${slice_name}.osrm" \
-                        --threads "$(nproc)" \
-                        ${CUSTOMIZE_EXTRA_ARGS:-} || handle_error "osrm-customize failed for ${slice_name}"
+                        ${CONTRACT_EXTRA_ARGS:-} || handle_error "osrm-contract failed for ${slice_name}"
                     
                     # Upload all OSRM files for this slice
                     log_progress "Uploading ${slice_name} files to S3"
@@ -473,20 +414,13 @@ main() {
                     --threads "$(nproc)" \
                     ${EXTRACT_EXTRA_ARGS:-} || handle_error "osrm-extract failed"
                 
-                # Partition
-                log_progress "Running osrm-partition"
-                /usr/local/bin/osrm-partition \
+                # Contract
+                log_progress "Running osrm-contract"
+                /usr/local/bin/osrm-contract \
                     "${OSRM_DATA_DIR}/${base_name}.osrm" \
                     --threads "$(nproc)" \
-                    ${PARTITION_EXTRA_ARGS:-} || handle_error "osrm-partition failed"
-                
-                # Customize
-                log_progress "Running osrm-customize"
-                /usr/local/bin/osrm-customize \
-                    "${OSRM_DATA_DIR}/${base_name}.osrm" \
-                    --threads "$(nproc)" \
-                    ${CUSTOMIZE_EXTRA_ARGS:-} || handle_error "osrm-customize failed"
-                
+                    ${CONTRACT_EXTRA_ARGS:-} || handle_error "osrm-contract failed"
+                                
                 # Upload all OSRM files
                 log_progress "Uploading files to S3"
                 for ext in osrm osrm.names osrm.restrictions osrm.maneuver_overrides osrm.turn_weight_penalties osrm.turn_duration_penalties osrm.datasource_names osrm.partition osrm.cells osrm.cell_metrics osrm.mld; do
@@ -528,10 +462,9 @@ Usage: osrm-batch.sh <operation> [options]
 Operations:
   extract       Extract data from OSM file
   contract      Contract the graph
-  partition     Partition the graph
   customize     Customize the graph
   routed        Start OSRM routing server
-  pipeline      Run complete pipeline (extract -> partition -> customize)
+  pipeline      Run complete pipeline (extract -> contract -> customize)
 
 Environment Variables:
   OSRM_OPERATION    - Operation to perform
@@ -542,7 +475,7 @@ Environment Variables:
   OSRM_PORT         - Port for routed operation (default: 5000)
   
   Additional args can be passed via:
-  EXTRACT_EXTRA_ARGS, CONTRACT_EXTRA_ARGS, PARTITION_EXTRA_ARGS,
+  EXTRACT_EXTRA_ARGS, CONTRACT_EXTRA_ARGS, CONTRACT_EXTRA_ARGS,
   CUSTOMIZE_EXTRA_ARGS, ROUTED_EXTRA_ARGS
 
 Examples:
@@ -577,7 +510,7 @@ run_pipeline() {
         OSRM_OPERATION=contract OSRM_FILE="${temp_base}.osrm" /scripts/entrypoint.sh
     else
         # MLD pipeline
-        OSRM_OPERATION=partition OSRM_FILE="${temp_base}.osrm" /scripts/entrypoint.sh
+        OSRM_OPERATION=contract OSRM_FILE="${temp_base}.osrm" /scripts/entrypoint.sh
         OSRM_OPERATION=customize OSRM_FILE="${temp_base}.osrm" OSRM_FILE_BASE="${temp_base}" /scripts/entrypoint.sh
     fi
     
@@ -585,7 +518,7 @@ run_pipeline() {
 }
 
 case "${1:-}" in
-    extract|contract|partition|customize|routed)
+    extract|contract|routed)
         OSRM_OPERATION="$1" /scripts/entrypoint.sh
         ;;
     pipeline)
@@ -608,7 +541,6 @@ RUN chmod +x /scripts/osrm-batch.sh
 RUN /usr/local/bin/osrm-extract --help && \
     /usr/local/bin/osrm-routed --help && \
     /usr/local/bin/osrm-contract --help && \
-    /usr/local/bin/osrm-partition --help && \
     /usr/local/bin/osrm-customize --help
 
 # Set working directory
