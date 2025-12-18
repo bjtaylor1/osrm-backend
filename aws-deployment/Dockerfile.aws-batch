@@ -47,10 +47,10 @@ RUN NPROC=${BUILD_CONCURRENCY:-$(nproc)} && \
         -DENABLE_ASSERTIONS=${ENABLE_ASSERTIONS} \
         -DENABLE_LTO=Off \
         -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG -march=x86-64" \
-        -DCMAKE_EXE_LINKER_FLAGS="-s" && \
+        -DCMAKE_EXE_LINKER_FLAGS="-s" && \  
     make -j2 install && \
-    cd ../profiles && \
-    cp -r * /opt && \
+    cd .. && \
+    cp -r profiles/* /opt/ && \
     strip /usr/local/bin/* && \
     rm -rf /src# Multi-stage build for production image
 FROM debian:bookworm-slim AS production
@@ -90,6 +90,7 @@ ENV OSRM_OUTPUT_DIR=/output
 ENV OSRM_LOG_DIR=/logs
 ENV MALLOC_MMAP_THRESHOLD_=1048576
 ENV MALLOC_TRIM_THRESHOLD_=134217728
+ENV LUA_PATH="/opt/?.lua;/opt/?/init.lua;;"
 
 # Create entrypoint script for AWS Batch
 RUN cat > /scripts/entrypoint.sh << 'EOF'
