@@ -216,11 +216,10 @@ main() {
             [[ -f "${profile_path}" ]] || handle_error "Profile ${PROFILE}.lua not found"
             
             # Run extract
-            log_progress "Running osrm-extract with profile ${PROFILE} (CH mode)"
+            log_progress "Running osrm-extract with profile ${PROFILE}"
             /usr/local/bin/osrm-extract \
                 "${osm_local_file}" \
                 --profile "${profile_path}" \
-                --algorithm CH \
                 --threads "$(nproc)" \
                 ${EXTRACT_EXTRA_ARGS:-} || handle_error "osrm-extract failed"
             
@@ -264,7 +263,7 @@ main() {
             # Download all related files
             local base_name=$(basename ${osrm_local_file%.*})
             if [[ -n "${OSRM_FILE_BASE:-}" ]]; then
-                for ext in names restrictions maneuver_overrides turn_weight_penalties turn_duration_penalties datasource_names hsgr level core; do
+                for ext in names restrictions maneuver_overrides turn_weight_penalties turn_duration_penalties datasource_names hsgr level core partition cells cell_metrics mld; do
                     local s3_file="${OSRM_FILE_BASE}.osrm.${ext}"
                     local local_file="${OSRM_DATA_DIR}/${base_name}.osrm.${ext}"
                     if aws s3 ls "$s3_file" >/dev/null 2>&1; then
@@ -377,11 +376,10 @@ main() {
                     fi
                     
                     # Run OSRM pipeline on slice
-                    log_progress "Running osrm-extract on ${slice_name} (CH mode)"
+                    log_progress "Running osrm-extract on ${slice_name}"
                     /usr/local/bin/osrm-extract \
                         "${slice_file}" \
                         --profile "${profile_path}" \
-                        --algorithm CH \
                         --threads "$(nproc)" \
                         ${EXTRACT_EXTRA_ARGS:-} || handle_error "osrm-extract failed for ${slice_name}"
                     
@@ -393,7 +391,7 @@ main() {
                     
                     # Upload all OSRM files for this slice
                     log_progress "Uploading ${slice_name} files to S3"
-                    for ext in osrm osrm.names osrm.restrictions osrm.maneuver_overrides osrm.turn_weight_penalties osrm.turn_duration_penalties osrm.datasource_names osrm.hsgr osrm.level osrm.core; do
+                    for ext in osrm osrm.names osrm.restrictions osrm.maneuver_overrides osrm.turn_weight_penalties osrm.turn_duration_penalties osrm.datasource_names osrm.partition osrm.cells osrm.cell_metrics osrm.mld; do
                         if [[ -f "${OSRM_DATA_DIR}/${slice_name}.${ext}" ]]; then
                             upload_s3_file "${OSRM_DATA_DIR}/${slice_name}.${ext}" "${OSRM_OUTPUT_DIR}/${slice_name}.${ext}"
                         fi
@@ -409,11 +407,10 @@ main() {
                 local base_name=$(basename ${osm_local_file%.*})
                 
                 # Extract
-                log_progress "Running osrm-extract with profile ${PROFILE} (CH mode)"
+                log_progress "Running osrm-extract with profile ${PROFILE}"
                 /usr/local/bin/osrm-extract \
                     "${osm_local_file}" \
                     --profile "${profile_path}" \
-                    --algorithm CH \
                     --threads "$(nproc)" \
                     ${EXTRACT_EXTRA_ARGS:-} || handle_error "osrm-extract failed"
                 
@@ -426,7 +423,7 @@ main() {
                                 
                 # Upload all OSRM files
                 log_progress "Uploading files to S3"
-                for ext in osrm osrm.names osrm.restrictions osrm.maneuver_overrides osrm.turn_weight_penalties osrm.turn_duration_penalties osrm.datasource_names osrm.hsgr osrm.level osrm.core; do
+                for ext in osrm osrm.names osrm.restrictions osrm.maneuver_overrides osrm.turn_weight_penalties osrm.turn_duration_penalties osrm.datasource_names osrm.partition osrm.cells osrm.cell_metrics osrm.mld; do
                     if [[ -f "${OSRM_DATA_DIR}/${base_name}.${ext}" ]]; then
                         upload_s3_file "${OSRM_DATA_DIR}/${base_name}.${ext}" "${OSRM_OUTPUT_DIR}/${base_name}.${ext}"
                     fi
