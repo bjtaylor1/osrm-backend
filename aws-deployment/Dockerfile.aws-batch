@@ -223,33 +223,29 @@ main() {
                 --threads "$(nproc)" \
                 ${EXTRACT_EXTRA_ARGS:-} || handle_error "osrm-extract failed"
             
-            # Upload results
-            local base_name=$(basename ${osm_local_file%.*})
-            for ext in osrm osrm.names osrm.restrictions osrm.maneuver_overrides osrm.turn_weight_penalties osrm.turn_duration_penalties osrm.datasource_names; do
-                if [[ -f "${OSRM_DATA_DIR}/${base_name}.${ext}" ]]; then
-                    upload_s3_file "${OSRM_DATA_DIR}/${base_name}.${ext}" "${OSRM_OUTPUT_DIR}/${base_name}.${ext}"
+            # Upload all generated OSRM files
+            for file in "${OSRM_DATA_DIR}"/input.osrm*; do
+                if [[ -f "$file" ]]; then
+                    upload_s3_file "$file" "${OSRM_OUTPUT_DIR}/$(basename "$file")"
                 fi
             done
             ;;
             
         contract)
-            local osrm_local_file="${OSRM_DATA_DIR}/input.osrm"
+            # Download OSRM file to /data/input.osrm
+            download_s3_file "${OSRM_FILE}" "${OSRM_DATA_DIR}/input.osrm"
             
-            # Download OSRM file
-            download_s3_file "${OSRM_FILE}" "${osrm_local_file}"
-            
-            # Run contract
-            log_progress "Running osrm-contract"
+            # Run contract - pass /data/input (without .osrm extension)
+            log_progress "Running osrm-contract on ${OSRM_DATA_DIR}/input"
             /usr/local/bin/osrm-contract \
-                "${osrm_local_file}" \
+                "${OSRM_DATA_DIR}/input" \
                 --threads "$(nproc)" \
                 ${CONTRACT_EXTRA_ARGS:-} || handle_error "osrm-contract failed"
             
-            # Upload results
-            local base_name=$(basename ${osrm_local_file%.*})
-            for ext in osrm.hsgr osrm.level osrm.core; do
-                if [[ -f "${OSRM_DATA_DIR}/${base_name}.${ext}" ]]; then
-                    upload_s3_file "${OSRM_DATA_DIR}/${base_name}.${ext}" "${OSRM_OUTPUT_DIR}/${base_name}.${ext}"
+            # Upload all generated OSRM files
+            for file in "${OSRM_DATA_DIR}"/input.osrm.*; do
+                if [[ -f "$file" ]]; then
+                    upload_s3_file "$file" "${OSRM_OUTPUT_DIR}/$(basename "$file")"
                 fi
             done
             ;;
@@ -385,15 +381,15 @@ main() {
                     
                     log_progress "Running osrm-contract on ${slice_name}"
                     /usr/local/bin/osrm-contract \
-                        "${OSRM_DATA_DIR}/${slice_name}.osrm" \
+                        "${OSRM_DATA_DIR}/${slice_name}" \
                         --threads "$(nproc)" \
                         ${CONTRACT_EXTRA_ARGS:-} || handle_error "osrm-contract failed for ${slice_name}"
                     
                     # Upload all OSRM files for this slice
                     log_progress "Uploading ${slice_name} files to S3"
-                    for ext in osrm osrm.names osrm.restrictions osrm.maneuver_overrides osrm.turn_weight_penalties osrm.turn_duration_penalties osrm.datasource_names osrm.partition osrm.cells osrm.cell_metrics osrm.mld; do
-                        if [[ -f "${OSRM_DATA_DIR}/${slice_name}.${ext}" ]]; then
-                            upload_s3_file "${OSRM_DATA_DIR}/${slice_name}.${ext}" "${OSRM_OUTPUT_DIR}/${slice_name}.${ext}"
+                    for file in "${OSRM_DATA_DIR}/${slice_name}".osrm*; do
+                        if [[ -f "$file" ]]; then
+                            upload_s3_file "$file" "${OSRM_OUTPUT_DIR}/$(basename "$file")"
                         fi
                     done
                     
@@ -414,18 +410,19 @@ main() {
                     --threads "$(nproc)" \
                     ${EXTRACT_EXTRA_ARGS:-} || handle_error "osrm-extract failed"
                 
-                # Contract
-                log_progress "Running osrm-contract"
+                # Contract - use base name without .osrm extension
+                ls "${OSRM_DATA_DIR}"
+                log_progress "Running osrm-contract on ${OSRM_DATA_DIR}/${base_name}"
                 /usr/local/bin/osrm-contract \
-                    "${OSRM_DATA_DIR}/${base_name}.osrm" \
+                    "${OSRM_DATA_DIR}/${base_name}" \
                     --threads "$(nproc)" \
                     ${CONTRACT_EXTRA_ARGS:-} || handle_error "osrm-contract failed"
                                 
                 # Upload all OSRM files
                 log_progress "Uploading files to S3"
-                for ext in osrm osrm.names osrm.restrictions osrm.maneuver_overrides osrm.turn_weight_penalties osrm.turn_duration_penalties osrm.datasource_names osrm.partition osrm.cells osrm.cell_metrics osrm.mld; do
-                    if [[ -f "${OSRM_DATA_DIR}/${base_name}.${ext}" ]]; then
-                        upload_s3_file "${OSRM_DATA_DIR}/${base_name}.${ext}" "${OSRM_OUTPUT_DIR}/${base_name}.${ext}"
+                for file in "${OSRM_DATA_DIR}/${base_name}".osrm*; do
+                    if [[ -f "$file" ]]; then
+                        upload_s3_file "$file" "${OSRM_OUTPUT_DIR}/$(basename "$file")"
                     fi
                 done
             fi
