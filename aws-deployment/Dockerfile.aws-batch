@@ -225,6 +225,7 @@ main() {
             
             # Upload all generated OSRM files
             for file in "${OSRM_DATA_DIR}"/input.osrm*; do
+                log_progress "Uploading $(basename "$file")"
                 upload_s3_file "$file" "${OSRM_OUTPUT_DIR}/$(basename "$file")"
             done
             ;;
@@ -242,6 +243,7 @@ main() {
             
             # Upload all generated OSRM files
             for file in "${OSRM_DATA_DIR}"/input.osrm.*; do
+                log_progress "Uploading $(basename "$file")"
                 upload_s3_file "$file" "${OSRM_OUTPUT_DIR}/$(basename "$file")"
             done
             ;;
@@ -384,6 +386,7 @@ main() {
                     # Upload all OSRM files for this slice
                     log_progress "Uploading ${slice_name} files to S3"
                     for file in "${OSRM_DATA_DIR}/${slice_name}".osrm*; do
+                        log_progress "Uploading $(basename "$file")"
                         upload_s3_file "$file" "${OSRM_OUTPUT_DIR}/$(basename "$file")"
                     done
                     
@@ -394,7 +397,6 @@ main() {
                 log_progress "All ${num_slices} slices processed successfully"
             else
                 log_progress "No split config, processing as single file"
-                local base_name=$(basename ${osm_local_file%.*})
                 
                 # Extract
                 log_progress "Running osrm-extract with profile ${PROFILE}"
@@ -404,17 +406,18 @@ main() {
                     --threads "$(nproc)" \
                     ${EXTRACT_EXTRA_ARGS:-} || handle_error "osrm-extract failed"
                 
-                # Contract - use base name without .osrm extension
-                ls "${OSRM_DATA_DIR}"
-                log_progress "Running osrm-contract on ${OSRM_DATA_DIR}/${base_name}"
+                # Contract - use /data/input (without .osrm extension)
+                log_progress "Running osrm-contract on ${OSRM_DATA_DIR}/input"
                 /usr/local/bin/osrm-contract \
-                    "${OSRM_DATA_DIR}/${base_name}" \
+                    "${OSRM_DATA_DIR}/input" \
                     --threads "$(nproc)" \
                     ${CONTRACT_EXTRA_ARGS:-} || handle_error "osrm-contract failed"
                                 
                 # Upload all OSRM files
                 log_progress "Uploading files to S3"
-                for file in "${OSRM_DATA_DIR}/${base_name}".osrm*; do
+                ls -lh "${OSRM_DATA_DIR}"
+                for file in "${OSRM_DATA_DIR}"/input.osrm*; do
+                    log_progress "Uploading $(basename "$file")"
                     upload_s3_file "$file" "${OSRM_OUTPUT_DIR}/$(basename "$file")"
                 done
             fi
