@@ -129,7 +129,7 @@ log_progress() {
 }
 
 # Function to download from S3, HTTP, or local file
-download_s3_file() {
+download_file() {
     local s3_path="$1"
     local local_path="$2"
     
@@ -138,7 +138,7 @@ download_s3_file() {
         aws s3 cp "$s3_path" "$local_path" || handle_error "Failed to download $s3_path"
     elif [[ "$s3_path" == http://* ]] || [[ "$s3_path" == https://* ]]; then
         log_progress "Downloading $s3_path to $local_path"
-        wget -O "$local_path" "$s3_path" || handle_error "Failed to download $s3_path"
+        wget -O --no-verbose "$local_path" "$s3_path" || handle_error "Failed to download $s3_path"
     else
         log_progress "Using local file: $s3_path"
         cp "$s3_path" "$local_path" || handle_error "Failed to copy $s3_path"
@@ -210,7 +210,7 @@ main() {
             local output_file="${OSRM_OUTPUT_DIR}/$(basename ${OSM_FILE%.*}).osrm"
             
             # Download OSM file
-            download_s3_file "${OSM_FILE}" "${osm_local_file}"
+            download_file "${OSM_FILE}" "${osm_local_file}"
             
             # Validate profile exists
             [[ -f "${profile_path}" ]] || handle_error "Profile ${PROFILE}.lua not found"
@@ -232,7 +232,7 @@ main() {
             
         contract)
             # Download OSRM file to /data/input.osrm
-            download_s3_file "${OSRM_FILE}" "${OSRM_DATA_DIR}/input.osrm"
+            download_file "${OSRM_FILE}" "${OSRM_DATA_DIR}/input.osrm"
             
             # Run contract - pass /data/input (without .osrm extension)
             log_progress "Running osrm-contract on ${OSRM_DATA_DIR}/input"
@@ -252,7 +252,7 @@ main() {
             local osrm_local_file="${OSRM_DATA_DIR}/input.osrm"
             
             # Download OSRM file and all required files
-            download_s3_file "${OSRM_FILE}" "${osrm_local_file}"
+            download_file "${OSRM_FILE}" "${osrm_local_file}"
             
             # Download all related files
             local base_name=$(basename ${osrm_local_file%.*})
@@ -261,7 +261,7 @@ main() {
                     local s3_file="${OSRM_FILE_BASE}.osrm.${ext}"
                     local local_file="${OSRM_DATA_DIR}/${base_name}.osrm.${ext}"
                     if aws s3 ls "$s3_file" >/dev/null 2>&1; then
-                        download_s3_file "$s3_file" "$local_file"
+                        download_file "$s3_file" "$local_file"
                     fi
                 done
             fi
@@ -309,7 +309,7 @@ main() {
             local split_config="${SPLIT_CONFIG:-}"
             
             # Download OSM file
-            download_s3_file "${OSM_FILE}" "${osm_local_file}"
+            download_file "${OSM_FILE}" "${osm_local_file}"
             
             # Validate profile exists
             [[ -f "${profile_path}" ]] || handle_error "Profile ${PROFILE}.lua not found"
@@ -320,7 +320,7 @@ main() {
                 
                 # Download split config (supports S3 or HTTP)
                 local split_config_file="${OSRM_DATA_DIR}/split-config.json"
-                download_s3_file "${split_config}" "${split_config_file}"
+                download_file "${split_config}" "${split_config_file}"
                 
                 # Get bounding box from OSM file for latitude bounds
                 local bbox=$(osmium fileinfo -e -g data.bbox "${osm_local_file}" | grep -oP '(?<=\()[-0-9.,]+(?=\))')
