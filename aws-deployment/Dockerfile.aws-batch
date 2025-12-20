@@ -130,18 +130,18 @@ log_progress() {
 
 # Function to download from S3, HTTP, or local file
 download_file() {
-    local s3_path="$1"
+    local remote_path="$1"
     local local_path="$2"
     
-    if [[ "$s3_path" == s3://* ]]; then
-        log_progress "Downloading $s3_path to $local_path"
-        aws s3 cp "$s3_path" "$local_path" || handle_error "Failed to download $s3_path"
-    elif [[ "$s3_path" == http://* ]] || [[ "$s3_path" == https://* ]]; then
-        log_progress "Downloading $s3_path to $local_path"
-        wget -O --no-verbose "$local_path" "$s3_path" || handle_error "Failed to download $s3_path"
+    if [[ "$remote_path" == s3://* ]]; then
+        log_progress "Downloading $remote_path to $local_path"
+        aws s3 cp "$remote_path" "$local_path" || handle_error "Failed to download $remote_path"
+    elif [[ "$remote_path" == http://* ]] || [[ "$remote_path" == https://* ]]; then
+        log_progress "Downloading $remote_path to $local_path"
+        wget -O --no-verbose "$local_path" "$remote_path" || handle_error "Failed to download $remote_path"
     else
-        log_progress "Using local file: $s3_path"
-        cp "$s3_path" "$local_path" || handle_error "Failed to copy $s3_path"
+        log_progress "Using local file: $remote_path"
+        cp "$remote_path" "$local_path" || handle_error "Failed to copy $remote_path"
     fi
 }
 
