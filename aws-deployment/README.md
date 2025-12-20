@@ -26,19 +26,39 @@ This deployment creates a production-ready OSRM routing server on AWS that handl
 
 ## Quick Start
 
+### Prerequisites
+
+1. **AWS IAM Roles**: Ensure the following roles exist:
+   - `BatchEcsTaskExecutionRole` - Required for AWS Batch job execution
+   - `ecsInstanceRole` - Required for EC2 instances in Batch compute environment
+
+2. **AWS Credentials**: You may need elevated permissions (root/admin profile) to create job definitions due to `iam:PassRole` requirements.
+
+### Setup Steps
+
 ```bash
 # 1. Build and push Docker image
 ./setup-aws-batch.sh build-and-push -r <your-ecr-registry>
 
-# 2. Process world data (creates 6 slices)
+# 2. Create AWS Batch infrastructure (use root profile for PassRole permission)
+AWS_PROFILE=gpxeditorroot ./setup-aws-batch.sh -r <your-ecr-registry> setup-full
+
+# 3. Process world data (creates 6 slices)
 ./process-world-data.sh --s3-bucket <your-bucket>
 
-# 3. Deploy production server
+# 4. Deploy production server
 ./deploy-server.sh --s3-bucket <your-bucket> --instance-type i3.xlarge
 
-# 4. Access routing API
+# 5. Access routing API
 curl "http://<server-ip>:5000/route/v1/bicycle/-73.989,40.733;-73.982,40.742?steps=true"
 ```
+
+## Important Configuration
+
+### Disk Space for Planet Processing
+- AWS Batch compute environments are configured with **500 GB EBS volumes** by default
+- This is required for downloading the planet file (~70-80 GB) and processing it
+- If you need to change the disk size, use: `./setup-aws-batch.sh --ebs-size <GB> create-queue`
 
 ## Geographic Slices
 

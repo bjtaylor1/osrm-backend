@@ -43,6 +43,7 @@ OPTIONS:
     --vcpus NUM           vCPUs for compute environment (default: 4)
     --memory MB           Memory for compute environment (default: 8192)
     --instance-types LIST Instance types (default: m5.large,m5.xlarge,c5.large,c5.xlarge)
+    --ebs-size GB         EBS volume size in GB (default: 500, needed for planet processing)
     -h, --help            Show this help
 
 EXAMPLES:
@@ -65,6 +66,7 @@ COMPUTE_ENV_NAME="osrm-batch-compute-env"
 VCPUS="4"
 MEMORY="8192"
 INSTANCE_TYPES="m5.large,m5.xlarge,c5.large,c5.xlarge"
+EBS_VOLUME_SIZE="500"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -98,6 +100,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --vcpus)
             VCPUS="$2"
+            shift 2
+            ;;
+        --ebs-size)
+            EBS_VOLUME_SIZE="$2"
             shift 2
             ;;
         --memory)
@@ -250,17 +256,23 @@ create_job_definition() {
         error "ECR_REGISTRY not set. Use -r option or create ECR repository first."
     fi
     
-    log "Creating AWS Batch job definition: ${JOB_DEFINITION_NAME}"
+    log "Registering AWS Batch job definition: ${JOB_DEFINITION_NAME}"
+    log "Note: This creates a new revision if the job definition already exists"
+    
+    # Get AWS account ID for role ARN
+    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+    EXECUTION_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/BatchEcsTaskExecutionRole"
     
     cat > /tmp/job-definition.json << EOF
 {
     "jobDefinitionName": "${JOB_DEFINITION_NAME}",
     "type": "container",
+    "platformCapabilities": ["EC2"],
     "containerProperties": {
         "image": "${ECR_REGISTRY}:${IMAGE_TAG}",
         "vcpus": ${VCPUS},
         "memory": ${MEMORY},
-        "jobRoleArn": "arn:aws:iam::$(aws sts get-caller-identity --query Account --output text):role/AWSBatchServiceRole",
+        "executionRoleArn": "${EXECUTION_ROLE_ARN}",
         "environment": [
             {
                 "name": "AWS_DEFAULT_REGION",
@@ -290,11 +302,20 @@ EOF
         --cli-input-json file:///tmp/job-definition.json \
         --region "${AWS_REGION}" 2>&1; then
         rm /tmp/job-definition.json
-        error "Failed to create AWS Batch job definition. Check that you have Batch permissions (batch:RegisterJobDefinition)."
+        error "Failed to register AWS Batch job definition. Check that you have Batch permissions (batch:RegisterJobDefinition)."
     fi
     
     rm /tmp/job-definition.json
-    log "✓ Job definition created: ${JOB_DEFINITION_NAME}"
+    
+    # Get the new revision number
+    REVISION=$(aws batch describe-job-definitions \
+        --job-definition-name "${JOB_DEFINITION_NAME}" \
+        --status ACTIVE \
+        --region "${AWS_REGION}" \
+        --query 'jobDefinitions[0].revision' \
+        --output text 2>/dev/null)
+    
+    log "✓ Job definition registered: ${JOB_DEFINITION_NAME}:${REVISION}"
 }
 
 # Create compute environment and job queue
@@ -325,15 +346,109 @@ create_queue() {
         --output text 2>/dev/null)
     
     if [[ -n "$existing_status" && "$existing_status" != "None" ]]; then
-        log "Compute environment already exists with status: ${existing_status}"
+        log "⚠️  Compute environment already exists with status: ${existing_status}"
+        log "⚠️  WARNING: Cannot update launch template on existing compute environment!"
+        log "⚠️  To apply ${EBS_VOLUME_SIZE}GB storage, you must delete and recreate:"
+        log "    1. aws batch update-job-queue --job-queue ${QUEUE_NAME} --state DISABLED"
+        log "    2. aws batch delete-job-queue --job-queue ${QUEUE_NAME}"
+        log "    3. aws batch update-compute-environment --compute-environment ${COMPUTE_ENV_NAME} --state DISABLED"
+        log "    4. aws batch delete-compute-environment --compute-environment ${COMPUTE_ENV_NAME}"
+        log "    5. Re-run this script"
+        log "Continuing with existing compute environment..."
     else
-        # Create compute environment
-        log "Creating new compute environment..."
+        # Create or update launch template with larger EBS volume
+        log "Setting up launch template with ${EBS_VOLUME_SIZE}GB EBS volume..."
+        LAUNCH_TEMPLATE_NAME="osrm-batch-launch-template-${COMPUTE_ENV_NAME}"
+        
+        # Check if launch template exists
+        if aws ec2 describe-launch-templates \
+            --launch-template-names "${LAUNCH_TEMPLATE_NAME}" \
+            --region "${AWS_REGION}" &>/dev/null; then
+            
+            log "Launch template exists, creating new version with ${EBS_VOLUME_SIZE}GB..."
+            aws ec2 create-launch-template-version \
+                --launch-template-name "${LAUNCH_TEMPLATE_NAME}" \
+                --launch-template-data '{
+                    "BlockDeviceMappings": [
+                        {
+                            "DeviceName": "/dev/xvda",
+                            "Ebs": {
+                                "VolumeSize": '"${EBS_VOLUME_SIZE}"',
+                                "VolumeType": "gp3",
+                                "DeleteOnTermination": true
+                            }
+                        }
+                    ]
+                }' \
+                --region "${AWS_REGION}" 2>&1 || error "Failed to create launch template version"
+            
+            # Set the new version as default
+            aws ec2 modify-launch-template \
+                --launch-template-name "${LAUNCH_TEMPLATE_NAME}" \
+                --default-version '$Latest' \
+                --region "${AWS_REGION}" 2>&1 || error "Failed to set default launch template version"
+            
+            log "✓ Updated launch template to ${EBS_VOLUME_SIZE}GB"
+        else
+            log "Creating new launch template..."
+            aws ec2 create-launch-template \
+                --launch-template-name "${LAUNCH_TEMPLATE_NAME}" \
+                --launch-template-data '{
+                    "BlockDeviceMappings": [
+                        {
+                            "DeviceName": "/dev/xvda",
+                            "Ebs": {
+                                "VolumeSize": '"${EBS_VOLUME_SIZE}"',
+                                "VolumeType": "gp3",
+                                "DeleteOnTermination": true
+                            }
+                        }
+                    ]
+                }' \
+                --region "${AWS_REGION}" 2>&1 || error "Failed to create launch template"
+            
+            log "✓ Created launch template with ${EBS_VOLUME_SIZE}GB"
+        fi
+        
+        # Get launch template ID
+        LAUNCH_TEMPLATE_ID=$(aws ec2 describe-launch-templates \
+            --launch-template-names "${LAUNCH_TEMPLATE_NAME}" \
+            --region "${AWS_REGION}" \
+            --query 'LaunchTemplates[0].LaunchTemplateId' \
+            --output text 2>&1)
+        
+        log "Using launch template: ${LAUNCH_TEMPLATE_ID}"
+        
+        # Get or create instance profile
+        INSTANCE_PROFILE_ARN=$(aws iam get-instance-profile --instance-profile-name ecsInstanceRole --query 'InstanceProfile.Arn' --output text 2>/dev/null || true)
+        if [[ -z "$INSTANCE_PROFILE_ARN" ]]; then
+            log "Creating ecsInstanceRole instance profile..."
+            # Create role if it doesn't exist
+            if ! aws iam get-role --role-name ecsInstanceRole &>/dev/null; then
+                aws iam create-role \
+                    --role-name ecsInstanceRole \
+                    --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":["ec2.amazonaws.com"]},"Action":["sts:AssumeRole"]}]}' 2>&1
+                aws iam attach-role-policy \
+                    --role-name ecsInstanceRole \
+                    --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role 2>&1
+            fi
+            # Create instance profile
+            aws iam create-instance-profile --instance-profile-name ecsInstanceRole 2>&1
+            aws iam add-role-to-instance-profile --instance-profile-name ecsInstanceRole --role-name ecsInstanceRole 2>&1
+            sleep 10  # Wait for IAM propagation
+            INSTANCE_PROFILE_ARN=$(aws iam get-instance-profile --instance-profile-name ecsInstanceRole --query 'InstanceProfile.Arn' --output text)
+            log "✓ Created instance profile"
+        else
+            log "Using existing instance profile: ecsInstanceRole"
+        fi
+        
+        # Create compute environment with launch template
+        log "Creating new compute environment with ${EBS_VOLUME_SIZE}GB storage..."
         if ! aws batch create-compute-environment \
             --compute-environment-name "${COMPUTE_ENV_NAME}" \
             --type MANAGED \
             --state ENABLED \
-            --compute-resources type=EC2,minvCpus=0,maxvCpus=256,desiredvCpus=0,instanceTypes="${INSTANCE_TYPES}",subnets="${SUBNET_ID}",securityGroupIds="${SG_ID}" \
+            --compute-resources type=EC2,minvCpus=0,maxvCpus=256,desiredvCpus=0,instanceTypes="${INSTANCE_TYPES}",instanceRole="${INSTANCE_PROFILE_ARN}",subnets="${SUBNET_ID}",securityGroupIds="${SG_ID}",launchTemplate="{launchTemplateId=${LAUNCH_TEMPLATE_ID}}" \
             --region "${AWS_REGION}" 2>&1; then
             error "Failed to create compute environment. Check that you have Batch and EC2 permissions."
         fi
