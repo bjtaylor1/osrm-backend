@@ -519,7 +519,7 @@ test_local() {
     
     # Test help
     docker run --rm "${IMAGE_NAME}:${IMAGE_TAG}" \
-        /scripts/osrm-batch.sh help
+        bash -c 'OSRM_OPERATION=help /scripts/Dockerfile.process-osrm-data.entrypoint.sh'
     
     # Test binary availability
     docker run --rm "${IMAGE_NAME}:${IMAGE_TAG}" \
