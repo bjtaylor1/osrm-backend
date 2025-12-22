@@ -1,7 +1,7 @@
 {
   "jobName": "monaco-pipeline",
-  "jobQueue": "osrm-batch-queue",
-  "jobDefinition": "osrm-batch-job",
+  "jobQueue": "osrm-queue",
+  "jobDefinition": "process-osrm-job",
   "containerOverrides": {
     "environment": [
       {"name": "OSRM_OPERATION", "value": "pipeline"},

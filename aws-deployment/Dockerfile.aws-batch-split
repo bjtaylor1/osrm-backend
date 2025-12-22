@@ -1,0 +1,35 @@
+# OSRM Split Testing Dockerfile
+# Lightweight image for testing OSM planet file splitting without full OSRM processing
+FROM debian:bookworm-slim
+
+# Install only the tools needed for splitting
+RUN apt-get update && \
+    apt-get install -y \
+        curl \
+        wget \
+        jq \
+        bc \
+        awscli \
+        ca-certificates \
+        osmium-tool && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create working directories
+RUN mkdir -p /data /output /scripts /logs
+
+# Set up environment variables
+ENV OSRM_DATA_DIR=/data
+ENV OSRM_OUTPUT_DIR=/output
+ENV OSRM_LOG_DIR=/logs
+
+# Copy entrypoint script
+COPY Dockerfile.test-planet-split.entrypoint.sh /scripts/Dockerfile.test-planet-split.entrypoint.sh
+
+# Make script executable
+RUN chmod +x /scripts/Dockerfile.test-planet-split.entrypoint.sh
+
+# Set working directory
+WORKDIR /data
+
+# Default entrypoint
+ENTRYPOINT ["/scripts/Dockerfile.test-planet-split.entrypoint.sh"]

@@ -7,7 +7,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
 echo "Building OSRM split testing image..."
-docker build -f Dockerfile.aws-batch-split -t osrm-split-test:latest .
+docker build -f Dockerfile.test-planet-split -t osrm-split-test:latest .
 
 echo ""
 echo "✅ Build complete!"

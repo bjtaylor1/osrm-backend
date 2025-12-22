@@ -67,7 +67,7 @@ After running the split test:
 
 ## Comparison: Full Pipeline vs Split Testing
 
-### Full Pipeline (Dockerfile.aws-batch)
+### Full Pipeline (Dockerfile.process-osrm-data)
 - Downloads planet.osm.pbf (~70GB, takes hours)
 - Splits into slices
 - Runs osrm-extract on each slice
@@ -75,7 +75,7 @@ After running the split test:
 - Uploads OSRM files to S3
 - **Time**: Hours per run
 
-### Split Testing (Dockerfile.aws-batch-split)
+### Split Testing (Dockerfile.test-planet-split)
 - Uses pre-downloaded planet.osm.pbf
 - Splits into slices only
 - Optionally uploads slices to S3
@@ -130,7 +130,7 @@ This has been fixed in both Dockerfiles by installing the `bc` package.
 
 ## Files
 
-- `Dockerfile.aws-batch-split`: The lightweight split testing image
+- `Dockerfile.test-planet-split`: The lightweight split testing image
 - `build-split-image.sh`: Builds the Docker image
 - `run-split-test.sh`: Runs the split test with proper volume mounts
 - `SPLIT-TESTING.md`: This documentation file

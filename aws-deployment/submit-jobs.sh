@@ -5,8 +5,8 @@
 set -euo pipefail
 
 # Configuration
-JOB_QUEUE="osrm-batch-queue"
-JOB_DEFINITION="osrm-batch-job"
+JOB_QUEUE="osrm-queue"
+JOB_DEFINITION="process-osrm-job"
 AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 
 show_help() {

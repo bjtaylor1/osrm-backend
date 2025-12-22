@@ -90,7 +90,7 @@ export JOB_DEFINITION=osrm-batch-job
 cd /Users/bentaylor/osrm-backend
 
 # Build the Docker image
-docker build -f Dockerfile.aws-batch -t osrm-aws-batch:test .
+docker build -f Dockerfile.process-osrm-data -t osrm-process-data:test .
 
 # This takes ~30-45 minutes (compiles OSRM)
 # You can continue while it builds in background
@@ -118,7 +118,7 @@ docker run --rm \
     -e PROFILE=bicycle_paved \
     -e OSRM_DATA_DIR=/data \
     -e OSRM_OUTPUT_DIR=/data \
-    osrm-aws-batch:test
+    osrm-process-data:test
 
 # Should create monaco.osrm and related files
 ls -lh /tmp/osrm-test/
@@ -129,14 +129,14 @@ docker run --rm -p 5000:5000 \
     -e OSRM_OPERATION=routed \
     -e OSRM_FILE=/data/monaco.osrm \
     -e OSRM_DATA_DIR=/data \
-    osrm-aws-batch:test &
+    osrm-process-data:test &
 
 # Test API (Monaco coordinates)
 sleep 10
 curl "http://localhost:5000/route/v1/bicycle/7.416,43.731;7.421,43.736?steps=true"
 
 # Should return JSON with route
-# Kill the server: docker stop $(docker ps -q --filter ancestor=osrm-aws-batch:test)
+# Kill the server: docker stop $(docker ps -q --filter ancestor=osrm-process-data:test)
 ```
 
 ### Step 3: Push to ECR and Setup AWS Batch (if using batch processing)
@@ -221,10 +221,10 @@ curl "http://<instance-ip>/route/v1/bicycle/7.416,43.731;7.421,43.736"
 
 ```bash
 # 1. Docker image exists
-docker images | grep osrm-aws-batch
+docker images | grep osrm-process-data
 
 # 2. ECR repository exists
-aws ecr describe-repositories --repository-names osrm-aws-batch
+aws ecr describe-repositories --repository-names osrm-process-data
 
 # 3. S3 bucket accessible
 aws s3 ls s3://${S3_BUCKET}/
@@ -301,7 +301,7 @@ aws batch delete-compute-environment \
 
 # Delete ECR repository
 aws ecr delete-repository \
-    --repository-name osrm-aws-batch \
+    --repository-name osrm-process-data \
     --force
 ```
 

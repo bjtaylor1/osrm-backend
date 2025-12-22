@@ -2,7 +2,7 @@
 
 set -e
 
-REPO_NAME="osrm-aws-batch"
+REPO_NAME="osrm-process-data"
 REGION="us-east-1"
 
 echo "Fetching untagged images..."

@@ -93,7 +93,10 @@ ENV MALLOC_MMAP_THRESHOLD_=1048576
 ENV MALLOC_TRIM_THRESHOLD_=134217728
 ENV LUA_PATH="/opt/?.lua;/opt/?/init.lua;;"
 
-# Make script executable
+# Copy entrypoint scripts
+COPY Dockerfile.process-osrm-data.entrypoint.sh /scripts/Dockerfile.process-osrm-data.entrypoint.sh
+
+# Make scripts executable
 RUN chmod +x /scripts/Dockerfile.process-osrm-data.entrypoint.sh
 
 # Test that OSRM binaries work
@@ -105,8 +108,15 @@ RUN /usr/local/bin/osrm-extract --help && \
 # Set working directory
 WORKDIR /opt
 
+# Health check for when running as a service
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:${OSRM_PORT:-5000}/health || exit 1
+
 # Default to the batch entrypoint
-ENTRYPOINT ["/Dockerfile.process-osrm-data.entrypoint.sh"]
+ENTRYPOINT ["/scripts/Dockerfile.process-osrm-data.entrypoint.sh"]
+
+# Expose default OSRM port
+EXPOSE 5000
 
 # Add labels for better container management
 LABEL maintainer="OSRM AWS Batch"

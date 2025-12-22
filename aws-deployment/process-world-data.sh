@@ -245,8 +245,8 @@ process_all_slices_local() {
 
 process_slice_batch() {
     local slice_name="$1"
-    local job_queue="${JOB_QUEUE:-osrm-batch-queue}"
-    local job_def="${JOB_DEFINITION:-osrm-batch-job}"
+    local job_queue="${JOB_QUEUE:-osrm-queue}"
+    local job_def="${JOB_DEFINITION:-process-osrm-job}"
     
     log "Submitting batch job for ${slice_name}..."
     
@@ -294,8 +294,8 @@ process_all_slices_batch() {
         
         local job_id=$(aws batch submit-job \
             --job-name "osrm-contract-${slice_name}-$(date +%Y%m%d-%H%M%S)" \
-            --job-queue "${JOB_QUEUE:-osrm-batch-queue}" \
-            --job-definition "${JOB_DEFINITION:-osrm-batch-job}" \
+            --job-queue "${JOB_QUEUE:-osrm-queue}" \
+            --job-definition "${JOB_DEFINITION:-process-osrm-job}" \
             --container-overrides "{
                 \"environment\": [
                     {\"name\": \"OSRM_OPERATION\", \"value\": \"contract\"},

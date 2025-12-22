@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}" && pwd)"
 
 # Default values
-IMAGE_NAME="osrm-aws-batch"
+IMAGE_NAME="osrm-process-data"
 IMAGE_TAG="latest"
 AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 ECR_REGISTRY=""
@@ -33,7 +33,7 @@ COMMANDS:
     clean               Clean up local images
 
 OPTIONS:
-    -n, --name NAME         Image name (default: osrm-aws-batch)
+    -n, --name NAME         Image name (default: osrm-process-data)
     -t, --tag TAG          Image tag (default: latest)
     -r, --registry REG     ECR registry URL
     -j, --job-name NAME    AWS Batch job definition name
@@ -60,9 +60,9 @@ EOF
 
 # Parse command line arguments
 COMMAND=""
-JOB_DEFINITION_NAME="osrm-batch-job"
-QUEUE_NAME="osrm-batch-queue"
-COMPUTE_ENV_NAME="osrm-batch-compute-env"
+JOB_DEFINITION_NAME="process-osrm-job"
+QUEUE_NAME="osrm-queue"
+COMPUTE_ENV_NAME="osrm-compute-env"
 VCPUS="4"
 MEMORY="8192"
 INSTANCE_TYPES="m5.large,m5.xlarge,c5.large,c5.xlarge"
@@ -171,7 +171,7 @@ build_image() {
     cd "${PROJECT_ROOT}"
     
     docker build \
-        -f Dockerfile.aws-batch \
+        -f Dockerfile.process-osrm-data \
         -t "${IMAGE_NAME}:${IMAGE_TAG}" \
         --build-arg BUILD_CONCURRENCY="${BUILD_CONCURRENCY}" \
         --build-arg CMAKE_BUILD_TYPE=Release \
@@ -358,7 +358,7 @@ create_queue() {
     else
         # Create or update launch template with larger EBS volume
         log "Setting up launch template with ${EBS_VOLUME_SIZE}GB EBS volume..."
-        LAUNCH_TEMPLATE_NAME="osrm-batch-launch-template-${COMPUTE_ENV_NAME}"
+        LAUNCH_TEMPLATE_NAME="osrm-launch-template-${COMPUTE_ENV_NAME}"
         
         # Check if launch template exists
         if aws ec2 describe-launch-templates \

@@ -5,7 +5,7 @@ set -e
 
 docker buildx build \
   --platform linux/amd64 \
-  -f ./aws-deployment/Dockerfile.aws-batch \
-  -t osrm-aws-batch:latest \
+  -f ./aws-deployment/Dockerfile.process-osrm-data \
+  -t osrm-process-data:latest \
   --load \
   .
