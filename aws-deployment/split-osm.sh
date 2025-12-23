@@ -21,14 +21,14 @@ split_osm() {
     # Process each poly file
     local output_files=()
     for poly_file in "${poly_files[@]}"; do
-        local slice_name=$(basename "$poly_file" .poly)
-        local output_file="${OSRM_DATA_DIR}/${slice_name}.osm.pbf"
+        local name=$(basename "$poly_file" .poly)
+        local output_file="/output/${name}.osm.pbf"
         
-        log_progress "Extracting ${slice_name}"
+        log_progress "Extracting ${name} to /output"
         osmosis --read-pbf "$input_file" \
                 --bounding-polygon file="$poly_file" \
                 --write-pbf "$output_file" \
-                || handle_error "Failed to extract ${slice_name}"
+                || handle_error "Failed to extract ${name}"
         
         output_files+=("$output_file")
     done

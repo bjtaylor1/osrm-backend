@@ -143,12 +143,12 @@ tail -f /var/log/cloud-init-output.log
 sudo supervisorctl status
 
 # Should show:
-# osrm_slice_a                     RUNNING   pid 1234, uptime 0:05:23
-# osrm_slice_b                     RUNNING   pid 1235, uptime 0:05:23
-# osrm_slice_c                     RUNNING   pid 1236, uptime 0:05:23
-# osrm_slice_d                     RUNNING   pid 1237, uptime 0:05:23
-# osrm_slice_e                     RUNNING   pid 1238, uptime 0:05:23
-# osrm_slice_f                     RUNNING   pid 1239, uptime 0:05:23
+# osrm_a                     RUNNING   pid 1234, uptime 0:05:23
+# osrm_b                     RUNNING   pid 1235, uptime 0:05:23
+# osrm_c                     RUNNING   pid 1236, uptime 0:05:23
+# osrm_d                     RUNNING   pid 1237, uptime 0:05:23
+# osrm_e                     RUNNING   pid 1238, uptime 0:05:23
+# osrm_f                     RUNNING   pid 1239, uptime 0:05:23
 
 # Check nginx
 sudo systemctl status nginx
@@ -288,12 +288,12 @@ ps aux | grep osrm-routed
 tail -f /var/log/nginx/osrm_access.log
 
 # Check OSRM logs
-tail -f /opt/osrm/logs/slice_*.log
+tail -f /opt/osrm/logs/*.log
 
 # Supervisor control
 sudo supervisorctl status
-sudo supervisorctl restart osrm:osrm_slice_a
-sudo supervisorctl tail osrm_slice_a
+sudo supervisorctl restart osrm:osrm_a
+sudo supervisorctl tail osrm_a
 ```
 
 ## Costs
@@ -320,7 +320,7 @@ sudo supervisorctl tail osrm_slice_a
 ### OSRM Process Won't Start
 ```bash
 # Check logs
-sudo supervisorctl tail osrm_slice_a stderr
+sudo supervisorctl tail osrm_a stderr
 
 # Common issues:
 # - Missing data files: verify S3 sync completed
@@ -328,7 +328,7 @@ sudo supervisorctl tail osrm_slice_a stderr
 # - Out of memory: check available RAM
 
 # Manual test
-/usr/local/bin/osrm-routed /opt/osrm/data/slice_a_north_america.osrm -p 5000
+/usr/local/bin/osrm-routed /opt/osrm/data/a_north_america.osrm -p 5000
 ```
 
 ### Nginx Routing Issues

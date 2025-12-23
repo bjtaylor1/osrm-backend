@@ -14,12 +14,12 @@ PARALLEL_PROCESSING="${PARALLEL_PROCESSING:-true}"
 
 # Geographic boundaries for slices (min_lon,min_lat,max_lon,max_lat)
 declare -A SLICES=(
-    ["slice_a_north_america"]="-170,15,-50,75"
-    ["slice_b_south_america"]="-85,-60,-30,15"
-    ["slice_c_europe_africa"]="-25,30,60,75"
-    ["slice_d_africa"]="-20,-35,55,30"
-    ["slice_e_asia"]="-60,-15,180,75"
-    ["slice_f_oceania"]="110,-50,180,-10"
+    ["a_north_america"]="-170,15,-50,75"
+    ["b_south_america"]="-85,-60,-30,15"
+    ["c_europe_africa"]="-25,30,60,75"
+    ["d_africa"]="-20,-35,55,30"
+    ["e_asia"]="-60,-15,180,75"
+    ["f_oceania"]="110,-50,180,-10"
 )
 
 show_help() {
@@ -162,65 +162,65 @@ split_planet() {
     
     log "Splitting planet file into ${#SLICES[@]} geographic slices..."
     
-    for slice_name in "${!SLICES[@]}"; do
-        local bbox="${SLICES[$slice_name]}"
-        local output_file="${slices_dir}/${slice_name}.osm.pbf"
+    for name in "${!SLICES[@]}"; do
+        local bbox="${SLICES[$name]}"
+        local output_file="${slices_dir}/${name}.osm.pbf"
         
         if [[ -f "$output_file" ]]; then
-            log "Slice ${slice_name} already exists, skipping"
+            log "Slice ${name} already exists, skipping"
             continue
         fi
         
-        log "Extracting ${slice_name} with bbox ${bbox}..."
+        log "Extracting ${name} with bbox ${bbox}..."
         
         osmium extract \
             --bbox "${bbox}" \
             --strategy complete_ways \
             -o "${output_file}" \
-            "${planet_file}" || error "Failed to extract ${slice_name}"
+            "${planet_file}" || error "Failed to extract ${name}"
         
-        log "Created ${slice_name}: $(du -h ${output_file} | cut -f1)"
+        log "Created ${name}: $(du -h ${output_file} | cut -f1)"
         
         # Upload slice to S3
-        aws s3 cp "${output_file}" "s3://${S3_BUCKET}/slices/${slice_name}.osm.pbf"
+        aws s3 cp "${output_file}" "s3://${S3_BUCKET}/slices/${name}.osm.pbf"
     done
     
     log "All slices created successfully"
 }
 
-process_slice_local() {
-    local slice_file="$1"
-    local slice_name=$(basename "${slice_file%.osm.pbf}")
+process_local() {
+    local file="$1"
+    local name=$(basename "${file%.osm.pbf}")
     local profile_path="$(dirname $0)/../profiles/${PROFILE}.lua"
     
     if [[ ! -f "$profile_path" ]]; then
         error "Profile not found: ${profile_path}"
     fi
     
-    log "Processing ${slice_name} with profile ${PROFILE}..."
+    log "Processing ${name} with profile ${PROFILE}..."
     
     # Extract
-    log "Running osrm-extract on ${slice_name}..."
-    osrm-extract "${slice_file}" \
+    log "Running osrm-extract on ${name}..."
+    osrm-extract "${file}" \
         -p "${profile_path}" \
-        --threads "$(nproc)" || error "Extract failed for ${slice_name}"
+        --threads "$(nproc)" || error "Extract failed for ${name}"
     
     # Contract
-    local osrm_file="${slice_file%.osm.pbf}.osrm"
-    log "Running osrm-contract on ${slice_name}..."
+    local osrm_file="${file%.osm.pbf}.osrm"
+    log "Running osrm-contract on ${name}..."
     osrm-contract "${osrm_file}" \
-        --threads "$(nproc)" || error "Contract failed for ${slice_name}"
+        --threads "$(nproc)" || error "Contract failed for ${name}"
     
     # Upload all OSRM files to S3
-    log "Uploading processed files for ${slice_name}..."
-    local base_name="${slice_file%.osm.pbf}"
+    log "Uploading processed files for ${name}..."
+    local base_name="${file%.osm.pbf}"
     for file in "${base_name}".osrm*; do
         if [[ -f "$file" ]]; then
             aws s3 cp "$file" "s3://${S3_BUCKET}/processed/$(basename $file)"
         fi
     done
     
-    log "Completed processing ${slice_name}"
+    log "Completed processing ${name}"
 }
 
 process_all_slices_local() {
@@ -230,34 +230,34 @@ process_all_slices_local() {
     
     if [[ "$PARALLEL_PROCESSING" == "true" ]]; then
         log "Processing slices in parallel..."
-        for slice_file in "${slices_dir}"/*.osm.pbf; do
-            process_slice_local "$slice_file" &
+        for file in "${slices_dir}"/*.osm.pbf; do
+            process_local "$file" &
         done
         wait
     else
-        for slice_file in "${slices_dir}"/*.osm.pbf; do
-            process_slice_local "$slice_file"
+        for file in "${slices_dir}"/*.osm.pbf; do
+            process_local "$file"
         done
     fi
     
     log "All slices processed"
 }
 
-process_slice_batch() {
-    local slice_name="$1"
+process_batch() {
+    local name="$1"
     local job_queue="${JOB_QUEUE:-osrm-queue}"
     local job_def="${JOB_DEFINITION:-process-osrm-job}"
     
-    log "Submitting batch job for ${slice_name}..."
+    log "Submitting batch job for ${name}..."
     
     local job_id=$(aws batch submit-job \
-        --job-name "osrm-process-${slice_name}-$(date +%Y%m%d-%H%M%S)" \
+        --job-name "osrm-process-${name}-$(date +%Y%m%d-%H%M%S)" \
         --job-queue "${job_queue}" \
         --job-definition "${job_def}" \
         --container-overrides "{
             \"environment\": [
                 {\"name\": \"OSRM_OPERATION\", \"value\": \"extract\"},
-                {\"name\": \"OSM_FILE\", \"value\": \"s3://${S3_BUCKET}/slices/${slice_name}.osm.pbf\"},
+                {\"name\": \"OSM_FILE\", \"value\": \"s3://${S3_BUCKET}/slices/${name}.osm.pbf\"},
                 {\"name\": \"PROFILE\", \"value\": \"${PROFILE}\"},
                 {\"name\": \"OSRM_OUTPUT_DIR\", \"value\": \"s3://${S3_BUCKET}/processed/\"}
             ]
@@ -275,9 +275,9 @@ process_all_slices_batch() {
     local job_ids=()
     
     # Submit extract jobs
-    for slice_name in "${!SLICES[@]}"; do
-        local extract_job_id=$(process_slice_batch "$slice_name")
-        log "Submitted extract job for ${slice_name}: ${extract_job_id}"
+    for name in "${!SLICES[@]}"; do
+        local extract_job_id=$(process_batch "$name")
+        log "Submitted extract job for ${name}: ${extract_job_id}"
         job_ids+=("$extract_job_id")
     done
     
@@ -289,17 +289,17 @@ process_all_slices_batch() {
     
     # Submit contract jobs
     local contract_job_ids=()
-    for slice_name in "${!SLICES[@]}"; do
-        log "Submitting contract job for ${slice_name}..."
+    for name in "${!SLICES[@]}"; do
+        log "Submitting contract job for ${name}..."
         
         local job_id=$(aws batch submit-job \
-            --job-name "osrm-contract-${slice_name}-$(date +%Y%m%d-%H%M%S)" \
+            --job-name "osrm-contract-${name}-$(date +%Y%m%d-%H%M%S)" \
             --job-queue "${JOB_QUEUE:-osrm-queue}" \
             --job-definition "${JOB_DEFINITION:-process-osrm-job}" \
             --container-overrides "{
                 \"environment\": [
                     {\"name\": \"OSRM_OPERATION\", \"value\": \"contract\"},
-                    {\"name\": \"OSRM_FILE\", \"value\": \"s3://${S3_BUCKET}/processed/${slice_name}.osrm\"},
+                    {\"name\": \"OSRM_FILE\", \"value\": \"s3://${S3_BUCKET}/processed/${name}.osrm\"},
                     {\"name\": \"OSRM_OUTPUT_DIR\", \"value\": \"s3://${S3_BUCKET}/processed/\"}
                 ]
             }" \
@@ -307,7 +307,7 @@ process_all_slices_batch() {
             --query 'jobId' \
             --output text)
         
-        log "Submitted contract job for ${slice_name}: ${job_id}"
+        log "Submitted contract job for ${name}: ${job_id}"
         contract_job_ids+=("$job_id")
     done
     

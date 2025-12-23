@@ -94,17 +94,17 @@ After running the split test:
 {
   "slices": [
     {
-      "name": "slice_a",
+      "name": "a",
       "minLongitude": 116.5,
       "maxLongitude": -98.5
     },
     {
-      "name": "slice_b",
+      "name": "b",
       "minLongitude": -98.5,
       "maxLongitude": 80.5
     },
     {
-      "name": "slice_c",
+      "name": "c",
       "minLongitude": 80.5,
       "maxLongitude": 116.5
     }

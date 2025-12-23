@@ -30,10 +30,9 @@ RUN mkdir -p /src /opt && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy source code
-COPY . /src
-WORKDIR /src
+COPY . /
 
-    # Build OSRM with optimizations for batch processing
+# Build OSRM with optimizations for batch processing
 RUN NPROC=${BUILD_CONCURRENCY:-$(nproc)} && \
     export CXXFLAGS="-Wno-array-bounds -Wno-uninitialized -Wno-stringop-overflow -O3 -march=x86-64 -mtune=generic" && \
     echo "Building OSRM ${DOCKER_TAG} for AWS Batch" && \
@@ -77,12 +76,12 @@ COPY --from=builder /usr/local /usr/local
 COPY --from=builder /opt /opt
 
 # Create working directories
-RUN mkdir -p /data /output /scripts /logs /config
+RUN mkdir -p /data /output /logs /config
 
 # Copy split script and poly files
 COPY scripts/split-osm.sh /scripts/
 COPY config/*.poly /config/
-COPY Dockerfile.process-osrm-data.entrypoint.sh /scripts/
+COPY Dockerfile.process-osrm-data.entrypoint.sh /
 
 # Set up environment variables for AWS Batch
 ENV OSRM_DATA_DIR=/data
@@ -102,10 +101,10 @@ RUN /usr/local/bin/osrm-extract --help && \
     /usr/local/bin/osrm-customize --help
 
 # Set working directory
-WORKDIR /opt
+WORKDIR /
 
 # Default to the batch entrypoint
-ENTRYPOINT ["/scripts/Dockerfile.process-osrm-data.entrypoint.sh"]
+ENTRYPOINT ["/Dockerfile.process-osrm-data.entrypoint.sh"]
 
 # Add labels for better container management
 LABEL maintainer="OSRM AWS Batch"

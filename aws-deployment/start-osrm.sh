@@ -17,7 +17,7 @@ fi
 
 # Verify data files exist
 log "Verifying OSRM data files..."
-for slice in slice_a_north_america slice_b_south_america slice_c_europe_africa slice_d_africa slice_e_asia slice_f_oceania; do
+for slice in a_north_america b_south_america c_europe_africa d_africa e_asia f_oceania; do
     if [[ ! -f "/opt/osrm/data/${slice}.osrm" ]]; then
         log "ERROR: Missing data file: ${slice}.osrm"
         exit 1
