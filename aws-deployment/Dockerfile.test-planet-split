@@ -5,28 +5,25 @@ FROM debian:bookworm-slim
 # Install only the tools needed for splitting
 RUN apt-get update && \
     apt-get install -y \
-        curl \
-        wget \
-        jq \
-        bc \
         awscli \
         ca-certificates \
-        osmium-tool && \
+        osmosis && \
     rm -rf /var/lib/apt/lists/*
 
 # Create working directories
-RUN mkdir -p /data /output /scripts /logs
+RUN mkdir -p /data /output /scripts /logs /config
 
 # Set up environment variables
 ENV OSRM_DATA_DIR=/data
-ENV OSRM_OUTPUT_DIR=/output
 ENV OSRM_LOG_DIR=/logs
 
-# Copy entrypoint script
+# Copy poly files and scripts
+COPY config/*.poly /config/
+COPY scripts/split-osm.sh /scripts/
 COPY Dockerfile.test-planet-split.entrypoint.sh /scripts/
 
-# Make script executable
-RUN chmod +x /scripts/Dockerfile.test-planet-split.entrypoint.sh
+# Make scripts executable
+RUN chmod +x /scripts/*.sh
 
 # Set working directory
 WORKDIR /data

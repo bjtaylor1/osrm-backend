@@ -23,40 +23,19 @@ if [ ! -f "planet-latest.osm.pbf" ]; then
     exit 1
 fi
 
-PLANET_FILE="planet-latest.osm.pbf"
-
-# Check if SPLIT_CONFIG is set
-if [ -z "${SPLIT_CONFIG:-}" ]; then
-    echo "❌ Error: SPLIT_CONFIG environment variable not set"
-    echo ""
-    echo "Example usage:"
-    echo "  SPLIT_CONFIG=s3://my-osrm-data-715/config/planet-slices.json ./run-split-test.sh"
-    echo "  SPLIT_CONFIG=config/planet-slices.json ./run-split-test.sh"
-    exit 1
-fi
-
-# Set default output directory if not specified
-OSRM_OUTPUT_DIR="${OSRM_OUTPUT_DIR:-/output}"
-
 echo "🚀 Starting OSRM split test..."
-echo "   Planet file: $PLANET_FILE"
-echo "   Split config: $SPLIT_CONFIG"
-echo "   Output dir: $OSRM_OUTPUT_DIR"
-echo ""
 
 # Run the container
 # Mount the current directory to /data so planet.osm.pbf is available
 # Mount config directory if using local config
+awsdir=$(cd ~/.aws && pwd)
 docker run --rm \
-    -v "$SCRIPT_DIR:/data" \
-    -v "$SCRIPT_DIR/output:/output" \
-    -v "$SCRIPT_DIR/logs:/logs" \
-    -e "SPLIT_CONFIG=$SPLIT_CONFIG" \
-    -e "OSRM_OUTPUT_DIR=$OSRM_OUTPUT_DIR" \
-    -e "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}" \
-    -e "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}" \
-    -e "AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}" \
-    -e "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}" \
+    -v "$SCRIPT_DIR:/data:ro" \
+    -v "$SCRIPT_DIR/output:/output:rw" \
+    -v "$SCRIPT_DIR/logs:/logs:rw" \
+    -v "${awsdir}:/root/.aws:ro" \
+    -e "AWS_DEFAULT_REGION=us-east-1" \
+    -e "AWS_PROFILE=gpxeditoradmin" \
     osrm-split-test:latest
 
 echo ""

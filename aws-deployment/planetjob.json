@@ -6,7 +6,6 @@
     "environment": [
       {"name": "OSRM_OPERATION", "value": "pipeline"},
       {"name": "OSM_FILE", "value": "https://planet.osm.org/pbf/planet-latest.osm.pbf"},
-      {"name": "SPLIT_CONFIG", "value": "s3://my-osrm-data-715/config/planet-slices.json"},
       {"name": "PROFILE", "value": "bicycle_paved"},
       {"name": "OSRM_OUTPUT_DIR", "value": "s3://my-osrm-data-715/planet"}
     ]

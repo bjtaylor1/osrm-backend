@@ -1,0 +1,40 @@
+{
+  "slices": [
+    {
+      "name": "slice_a",
+      "minLongitude": 116.5,
+      "maxLongitude": -98.5,
+      "description": "Asia-Pacific to Americas (wraps dateline)"
+    },
+    {
+      "name": "slice_b",
+      "minLongitude": -99.5,
+      "maxLongitude": -67.5,
+      "description": "Central/Western Americas"
+    },
+    {
+      "name": "slice_c",
+      "minLongitude": -68.5,
+      "maxLongitude": 3.5,
+      "description": "Eastern Americas to Western Europe/Africa"
+    },
+    {
+      "name": "slice_d",
+      "minLongitude": 2.5,
+      "maxLongitude": 24.5,
+      "description": "Western Europe to Eastern Europe/Africa"
+    },
+    {
+      "name": "slice_e",
+      "minLongitude": 23.5,
+      "maxLongitude": 59.5,
+      "description": "Eastern Europe/Middle East to Central Asia"
+    },
+    {
+      "name": "slice_f",
+      "minLongitude": 58.5,
+      "maxLongitude": 117.5,
+      "description": "Central Asia to East Asia/Pacific"
+    }
+  ]
+}

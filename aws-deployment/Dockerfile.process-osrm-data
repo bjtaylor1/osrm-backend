@@ -65,16 +65,10 @@ RUN apt-get update && \
         libboost-thread1.81.0 \
         liblua5.4-0 \
         libtbb12 \
-        curl \
-        wget \
-        jq \
-        bc \
         awscli \
         ca-certificates \
         procps \
-        htop \
-        rsync \
-        osmium-tool && \
+        osmosis && \
     rm -rf /var/lib/apt/lists/* && \
     ldconfig /usr/local/lib
 
@@ -83,7 +77,12 @@ COPY --from=builder /usr/local /usr/local
 COPY --from=builder /opt /opt
 
 # Create working directories
-RUN mkdir -p /data /output /scripts /logs
+RUN mkdir -p /data /output /scripts /logs /config
+
+# Copy split script and poly files
+COPY scripts/split-osm.sh /scripts/
+COPY config/*.poly /config/
+COPY Dockerfile.process-osrm-data.entrypoint.sh /scripts/
 
 # Set up environment variables for AWS Batch
 ENV OSRM_DATA_DIR=/data
@@ -93,8 +92,8 @@ ENV MALLOC_MMAP_THRESHOLD_=1048576
 ENV MALLOC_TRIM_THRESHOLD_=134217728
 ENV LUA_PATH="/opt/?.lua;/opt/?/init.lua;;"
 
-# Make script executable
-RUN chmod +x /scripts/Dockerfile.process-osrm-data.entrypoint.sh
+# Make scripts executable
+RUN chmod +x /scripts/*.sh
 
 # Test that OSRM binaries work
 RUN /usr/local/bin/osrm-extract --help && \
@@ -106,7 +105,7 @@ RUN /usr/local/bin/osrm-extract --help && \
 WORKDIR /opt
 
 # Default to the batch entrypoint
-ENTRYPOINT ["/Dockerfile.process-osrm-data.entrypoint.sh"]
+ENTRYPOINT ["/scripts/Dockerfile.process-osrm-data.entrypoint.sh"]
 
 # Add labels for better container management
 LABEL maintainer="OSRM AWS Batch"
