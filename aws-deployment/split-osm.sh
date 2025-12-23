@@ -16,7 +16,7 @@ split_osm() {
         return 0
     fi
     
-    log_progress "Found ${#poly_files[@]} poly files for splitting"
+    log_progress "Found ${#poly_files[@]} poly files for splitting" >&2
     
     # Process each poly file
     local output_files=()
@@ -24,7 +24,7 @@ split_osm() {
         local name=$(basename "$poly_file" .poly)
         local output_file="/output/${name}.osm.pbf"
         
-        log_progress "Extracting ${name} to /output"
+        log_progress "Extracting ${name} to /output" >&2
         osmosis --read-pbf "$input_file" \
                 --bounding-polygon file="$poly_file" \
                 --write-pbf "$output_file" \

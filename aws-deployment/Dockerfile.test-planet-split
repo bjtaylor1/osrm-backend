@@ -15,7 +15,7 @@ RUN mkdir -p /data /output /logs /config
 
 # Set up environment variables
 ENV OSRM_DATA_DIR=/data
-ENV OSRM_LOG_DIR=/logs
+
 
 # Copy poly files and scripts
 COPY config/*.poly /config/

@@ -3,7 +3,7 @@ set -euo pipefail
 
 trap 'echo "$(date "+%Y-%m-%d %H:%M:%S") - FATAL ERROR at line $LINENO: Command failed with exit code $?" >&2' ERR
 
-exec > >(tee -a ${OSRM_LOG_DIR}/process-osrm-data.log) 2>&1
+exec > >(tee -a /logs/process-osrm-data.log) 2>&1
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting OSRM AWS Batch processing"
 echo "Container ID: ${HOSTNAME}"

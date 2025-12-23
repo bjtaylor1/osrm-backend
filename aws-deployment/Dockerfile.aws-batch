@@ -88,7 +88,7 @@ RUN mkdir -p /data /output /scripts /logs
 # Set up environment variables for AWS Batch
 ENV OSRM_DATA_DIR=/data
 ENV OSRM_OUTPUT_DIR=/output
-ENV OSRM_LOG_DIR=/logs
+
 ENV MALLOC_MMAP_THRESHOLD_=1048576
 ENV MALLOC_TRIM_THRESHOLD_=134217728
 ENV LUA_PATH="/opt/?.lua;/opt/?/init.lua;;"

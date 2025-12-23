@@ -13,16 +13,19 @@ set -e
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
-homedir="$HOME"
 awsdir="$HOME/.aws"
-inputfile="$homedir/planet-latest.osm.pbf"
+# Expand tilde and resolve to absolute path
+inputfile="$(ls $1)"
+inputfilename=$(basename "$inputfile")
+
+echo Using input file $inputfile
+echo inputfilename = $inputfilename
 
 # Check if planet-latest.osm.pbf exists
 if [ ! -f "$inputfile" ]; then
     echo "❌ Error: $inputfile not found"
     echo ""
-    echo "Please download the planet file first:"
-    echo "  wget https://planet.osm.org/pbf/planet-latest.osm.pbf"
+    echo "Please download the .osm.pbf file first and pass this in"
     exit 1
 fi
 
@@ -33,8 +36,9 @@ echo "🚀 Starting OSRM split test..."
 docker run --rm \
     -v "$SCRIPT_DIR/output:/output:rw" \
     -v "$SCRIPT_DIR/logs:/logs:rw" \
-    -v "$inputfile:/data/planet-latest.osm.pbf:ro" \
+    -v "$inputfile:/data/$inputfilename:ro" \
     -v "$awsdir:/root/.aws:ro" \
+    -e "INPUT_FILE=$inputfilename" \
     -e "AWS_DEFAULT_REGION=us-east-1" \
     -e "AWS_PROFILE=gpxeditoradmin" \
     osrm-split-test:latest

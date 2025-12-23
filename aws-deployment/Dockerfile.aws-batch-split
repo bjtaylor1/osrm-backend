@@ -20,7 +20,7 @@ RUN mkdir -p /data /output /scripts /logs
 # Set up environment variables
 ENV OSRM_DATA_DIR=/data
 ENV OSRM_OUTPUT_DIR=/output
-ENV OSRM_LOG_DIR=/logs
+
 
 # Copy entrypoint script
 COPY Dockerfile.test-planet-split.entrypoint.sh /scripts/Dockerfile.test-planet-split.entrypoint.sh
