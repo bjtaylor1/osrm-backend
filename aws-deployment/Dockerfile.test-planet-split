@@ -13,23 +13,16 @@ RUN apt-get update && \
 # Create working directories
 RUN mkdir -p /data /output /logs /config
 
-# Set up environment variables
-ENV OSRM_DATA_DIR=/data
-
-
-# Copy poly files and scripts
-COPY config/*.poly /config/
-COPY /split-osm.sh /
-COPY Dockerfile.test-planet-split.entrypoint.sh /
-
 # Note: planet-latest.osm.pbf should be mounted at runtime with:
 # docker run -v /Users/bentaylor/planet-latest.osm.pbf:/data/planet-latest.osm.pbf ...
 
+COPY . /src
+
 # Make scripts executable
-RUN chmod +x /*.sh
+RUN chmod +x /src/aws-deployment/*.sh
 
 # Set working directory
-WORKDIR /
+WORKDIR /src
 
 # Default entrypoint
-ENTRYPOINT ["/Dockerfile.test-planet-split.entrypoint.sh"]
+ENTRYPOINT ["./aws-deployment/Dockerfile.test-planet-split.entrypoint.sh"]

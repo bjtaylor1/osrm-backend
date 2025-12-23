@@ -3,11 +3,11 @@
 
 set -e
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR"
+GIT_ROOT="$(git rev-parse --show-toplevel)"
+cd "$GIT_ROOT"
 
 echo "Building OSRM split testing image..."
-docker build -f Dockerfile.test-planet-split -t osrm-split-test:latest .
+docker build -f aws-deployment/Dockerfile.test-planet-split -t osrm-split-test:latest .
 
 echo ""
 echo "✅ Build complete!"

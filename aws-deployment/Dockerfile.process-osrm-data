@@ -30,7 +30,7 @@ RUN mkdir -p /src /opt && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy source code
-COPY . /
+COPY . /src
 
 # Build OSRM with optimizations for batch processing
 RUN NPROC=${BUILD_CONCURRENCY:-$(nproc)} && \
@@ -49,7 +49,6 @@ RUN NPROC=${BUILD_CONCURRENCY:-$(nproc)} && \
         -DCMAKE_EXE_LINKER_FLAGS="-s" && \  
     make -j2 install && \
     cd .. && \
-    cp -r profiles/* /opt/ && \
     strip /usr/local/bin/* && \
     rm -rf /src# Multi-stage build for production image
 FROM debian:bookworm-slim AS production
@@ -78,21 +77,13 @@ COPY --from=builder /opt /opt
 # Create working directories
 RUN mkdir -p /data /output /logs /config
 
-# Copy split script and poly files
-COPY scripts/split-osm.sh /scripts/
-COPY config/*.poly /config/
-COPY Dockerfile.process-osrm-data.entrypoint.sh /
-
-# Set up environment variables for AWS Batch
-ENV OSRM_DATA_DIR=/data
-ENV OSRM_OUTPUT_DIR=/output
-
 ENV MALLOC_MMAP_THRESHOLD_=1048576
 ENV MALLOC_TRIM_THRESHOLD_=134217728
-ENV LUA_PATH="/opt/?.lua;/opt/?/init.lua;;"
+ENV LUA_PATH="/profiles/?.lua"
 
 # Make scripts executable
-RUN chmod +x /scripts/*.sh
+RUN chmod +x /*.sh
+RUN chmod +x ./aws-deployment/*.sh
 
 # Test that OSRM binaries work
 RUN /usr/local/bin/osrm-extract --help && \
@@ -101,10 +92,10 @@ RUN /usr/local/bin/osrm-extract --help && \
     /usr/local/bin/osrm-customize --help
 
 # Set working directory
-WORKDIR /
+WORKDIR /src
 
 # Default to the batch entrypoint
-ENTRYPOINT ["/Dockerfile.process-osrm-data.entrypoint.sh"]
+ENTRYPOINT ["./aws-deployment/Dockerfile.process-osrm-data.entrypoint.sh"]
 
 # Add labels for better container management
 LABEL maintainer="OSRM AWS Batch"
