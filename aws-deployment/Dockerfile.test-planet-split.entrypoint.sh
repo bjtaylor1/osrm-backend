@@ -20,14 +20,6 @@ log_progress() {
 source ./aws-deployment/split-osm.sh || handle_error "Could not source split-osm.sh"
 
 main() {
-    echo "aws_deployment:"
-    ls ./aws-deployment
-    echo
-    echo "/data:"
-    ls /data
-    echo "/output:"
-    ls /output
-
     local osm_local_file="/data/$INPUT_FILE"
     [[ -f "$osm_local_file" ]] || handle_error "$osm_local_file not found"
     

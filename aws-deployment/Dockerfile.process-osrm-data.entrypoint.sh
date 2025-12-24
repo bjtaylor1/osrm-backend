@@ -1,15 +1,21 @@
 #!/bin/bash
 set -euo pipefail
 
+echo 'in entrypoint script'
 trap 'echo "$(date "+%Y-%m-%d %H:%M:%S") - FATAL ERROR at line $LINENO: Command failed with exit code $?" >&2' ERR
 
 exec > >(tee -a /logs/process-osrm-data.log) 2>&1
+
+handle_error() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: $1" >&2
+    exit 1
+}
 
 log_progress() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
 }
 
-source /aws-deployment/split-osm.sh
+source ./aws-deployment/split-osm.sh || handle_error "Could not source split-osm.sh"
 
 # Download OSM file
 cd /data
@@ -30,7 +36,7 @@ for osm_file in "${files_to_process[@]}"; do
     log_progress "Extracting ${file_name}"
     osrm-extract \
         "${osm_file}" \
-        --profile "/profiles/${PROFILE?}.lua" \
+        --profile "/src/profiles/${PROFILE?}.lua" \
         --threads "$(nproc)" \
         ${EXTRACT_EXTRA_ARGS:-}
     
@@ -42,11 +48,6 @@ for osm_file in "${files_to_process[@]}"; do
     
     log_progress "Uploading ${file_name}"
     for file in "${base_name}".osrm*; do
-        upload_s3_file "$file" "${S3_OUTPUT?}/$(basename "$file")"
+        aws s3 cp "$file" "s3://my-osrm-data-715/output/$(basename "$file")"
     done
-    
-    rm -f "${osm_file}" "${base_name}."*
-    log_progress "Uploading ${file_name}"
-    for file in "${base_name}".osrm*; do
-        aws s3 cp "$file" "${S3_OUTPUT?}/$(basename "$file")"
-    done
+done

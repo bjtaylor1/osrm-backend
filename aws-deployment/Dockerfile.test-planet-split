@@ -19,7 +19,7 @@ RUN mkdir -p /data /output /logs /config
 COPY . /src
 
 # Make scripts executable
-RUN chmod +x /src/aws-deployment/*.sh
+RUN chmod +x ./aws-deployment/*.sh
 
 # Set working directory
 WORKDIR /src

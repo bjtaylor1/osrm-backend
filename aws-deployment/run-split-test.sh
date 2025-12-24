@@ -33,7 +33,7 @@ echo "🚀 Starting OSRM split test..."
 
 # Run the container
 # Mount planet file as read-only, output and logs as writable
-docker run --rm \
+docker run --rm --platform linux/amd64 \
     -v "$SCRIPT_DIR/output:/output:rw" \
     -v "$SCRIPT_DIR/logs:/logs:rw" \
     -v "$inputfile:/data/$inputfilename:ro" \

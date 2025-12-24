@@ -8,7 +8,7 @@ split_osm() {
     local region_name=$(basename "$base_name")
     
     # Find poly files for this region
-    local poly_files=(./aws-deployment/config/${region_name}.*.poly)
+    local poly_files=(/src/aws-deployment/config/${region_name}.*.poly)
     
     # If no poly files exist, return input file
     if [[ ! -f "${poly_files[0]}" ]]; then

@@ -15,21 +15,26 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 awsdir="$HOME/.aws"
 
-echo "🚀 Starting OSRM split test..."
+echo "🚀 Starting process OSRM data..."
 
-local osm_source=https://download.geofabrik.de/europe/monaco-latest.osm.pbf
-local osm_file=monaco-latest
+osm_source=https://download.geofabrik.de/europe/monaco-latest.osm.pbf
+osm_file=monaco-latest
+
+rm -rf "$SCRIPT_DIR/data"
+mkdir -p "$SCRIPT_DIR/data"
 
 # Run the container
-docker run --rm \
+docker run --rm --platform linux/amd64 \
     -v "$SCRIPT_DIR/output:/output:rw" \
     -v "$SCRIPT_DIR/logs:/logs:rw" \
     -v "$awsdir:/root/.aws:ro" \
+    -v "$SCRIPT_DIR/data:/data:rw" \
     -e "OSM_SOURCE=$osm_source" \
     -e "OSM_FILE=$osm_file" \
     -e "AWS_DEFAULT_REGION=us-east-1" \
     -e "AWS_PROFILE=gpxeditoradmin" \
-    osrm-split-test:latest
+    -e "PROFILE=bicycle_paved" \
+    osrm-process-data:latest
 
 echo ""
 echo "✅ Process OSRM data finished!"

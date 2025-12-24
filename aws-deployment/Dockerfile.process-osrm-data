@@ -8,7 +8,7 @@ ARG CMAKE_BUILD_TYPE=Release
 ARG ENABLE_ASSERTIONS=Off
 
 # Install build dependencies
-RUN mkdir -p /src /opt && \
+RUN mkdir -p /src && \
     apt-get update && \
     apt-get -y --no-install-recommends --no-install-suggests install \
         ca-certificates \
@@ -24,21 +24,19 @@ RUN mkdir -p /src /opt && \
         libzip-dev \
         lua5.4 \
         make \
-        pkg-config \
-        curl \
-        wget && \
+        pkg-config && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy source code
 COPY . /src
 WORKDIR /src
 
+RUN chmod +x ./aws-deployment/*.sh
+
 # Build OSRM with optimizations for batch processing
 RUN NPROC=${BUILD_CONCURRENCY:-$(nproc)} && \
     export CXXFLAGS="-Wno-array-bounds -Wno-uninitialized -Wno-stringop-overflow -O3 -march=x86-64 -mtune=generic" && \
     echo "Building OSRM ${DOCKER_TAG} for AWS Batch" && \
-    git show --format="%H" | head -n1 > /opt/OSRM_GITSHA && \
-    echo "Building OSRM gitsha $(cat /opt/OSRM_GITSHA)" && \
     mkdir -p build && \
     cd build && \
     echo "Building ${CMAKE_BUILD_TYPE} with ENABLE_ASSERTIONS=${ENABLE_ASSERTIONS}" && \
@@ -68,13 +66,13 @@ RUN apt-get update && \
         awscli \
         ca-certificates \
         procps \
-        osmosis && \
+        osmosis \
+        wget && \
     rm -rf /var/lib/apt/lists/* && \
     ldconfig /usr/local/lib
 
 # Copy OSRM binaries and profiles from builder
 COPY --from=builder /usr/local /usr/local
-COPY --from=builder /opt /opt
 COPY --from=builder /src /src
 
 # Create working directories
