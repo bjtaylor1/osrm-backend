@@ -1,595 +1,106 @@
 #!/bin/bash
-
-# AWS Batch OSRM Setup Script
-# This script helps set up OSRM for AWS Batch processing
-
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}" && pwd)"
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+REGION=$(aws configure get region 2>/dev/null || echo "us-east-1")
 
-# Default values
-IMAGE_NAME="osrm-process-data"
-IMAGE_TAG="latest"
-AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
-ECR_REGISTRY=""
-BUILD_CONCURRENCY="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+echo "Setting up AWS Batch resources in ${REGION}"
 
-show_help() {
-    cat << 'EOF'
-OSRM AWS Batch Setup Script
+aws ecr describe-repositories --repository-names osrm-processor --region "${REGION}" &>/dev/null || \
+aws ecr create-repository --repository-name osrm-processor --region "${REGION}" --image-scanning-configuration scanOnPush=true
 
-Usage: ./setup-aws-batch.sh [OPTIONS] COMMAND
+ECR_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/osrm-processor"
 
-COMMANDS:
-    build               Build the Docker image locally
-    push                Push image to ECR (requires ECR_REGISTRY)
-    create-ecr          Create ECR repository
-    build-and-push      Build and push image to ECR
-    create-job-def      Create AWS Batch job definition
-    create-queue        Create AWS Batch job queue and compute environment
-    setup-full          Complete setup (ECR + Job Definition + Queue)
-    test-local          Test the image locally
-    clean               Clean up local images
+aws iam get-role --role-name OSRMBatchExecutionRole &>/dev/null || \
+aws iam create-role --role-name OSRMBatchExecutionRole --assume-role-policy-document '{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"Service": ["batch.amazonaws.com","ecs-tasks.amazonaws.com","ec2.amazonaws.com"]},
+    "Action": "sts:AssumeRole"
+  }]
+}'
 
-OPTIONS:
-    -n, --name NAME         Image name (default: osrm-process-data)
-    -t, --tag TAG          Image tag (default: latest)
-    -r, --registry REG     ECR registry URL
-    -j, --job-name NAME    AWS Batch job definition name
-    -q, --queue-name NAME  AWS Batch job queue name
-    -c, --compute-env NAME Compute environment name
-    --region REGION        AWS region (default: us-east-1)
-    --vcpus NUM           vCPUs for compute environment (default: 4)
-    --memory MB           Memory for compute environment (default: 8192)
-    --instance-types LIST Instance types (default: m5.large,m5.xlarge,c5.large,c5.xlarge)
-    --ebs-size GB         EBS volume size in GB (default: 500, needed for planet processing)
-    -h, --help            Show this help
+aws iam attach-role-policy --role-name OSRMBatchExecutionRole --policy-arn arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole || true
+aws iam attach-role-policy --role-name OSRMBatchExecutionRole --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy || true
+aws iam attach-role-policy --role-name OSRMBatchExecutionRole --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role || true
+aws iam attach-role-policy --role-name OSRMBatchExecutionRole --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess || true
 
-EXAMPLES:
-    # Build image locally
-    ./setup-aws-batch.sh build
-
-    # Full setup with custom names
-    ./setup-aws-batch.sh -r 123456789012.dkr.ecr.us-east-1.amazonaws.com -j osrm-job -q osrm-queue setup-full
-
-    # Test locally
-    ./setup-aws-batch.sh test-local
-EOF
+aws iam get-instance-profile --instance-profile-name OSRMBatchExecutionRole &>/dev/null || {
+  echo "Creating instance profile..."
+  aws iam create-instance-profile --instance-profile-name OSRMBatchExecutionRole
+  aws iam add-role-to-instance-profile --instance-profile-name OSRMBatchExecutionRole --role-name OSRMBatchExecutionRole
+  sleep 10
 }
 
-# Parse command line arguments
-COMMAND=""
-JOB_DEFINITION_NAME="process-osrm-job"
-QUEUE_NAME="osrm-queue"
-COMPUTE_ENV_NAME="osrm-compute-env"
-VCPUS="4"
-MEMORY="8192"
-INSTANCE_TYPES="m5.large,m5.xlarge,c5.large,c5.xlarge"
-EBS_VOLUME_SIZE="500"
+SUBNET_ID=$(aws ec2 describe-subnets --region "${REGION}" --query 'Subnets[0].SubnetId' --output text)
+SG_ID=$(aws ec2 describe-security-groups --region "${REGION}" --filters Name=group-name,Values=default --query 'SecurityGroups[0].GroupId' --output text)
+INSTANCE_PROFILE_ARN=$(aws iam get-instance-profile --instance-profile-name OSRMBatchExecutionRole --query 'InstanceProfile.Arn' --output text)
 
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -n|--name)
-            IMAGE_NAME="$2"
-            shift 2
-            ;;
-        -t|--tag)
-            IMAGE_TAG="$2"
-            shift 2
-            ;;
-        -r|--registry)
-            ECR_REGISTRY="$2"
-            shift 2
-            ;;
-        -j|--job-name)
-            JOB_DEFINITION_NAME="$2"
-            shift 2
-            ;;
-        -q|--queue-name)
-            QUEUE_NAME="$2"
-            shift 2
-            ;;
-        -c|--compute-env)
-            COMPUTE_ENV_NAME="$2"
-            shift 2
-            ;;
-        --region)
-            AWS_REGION="$2"
-            shift 2
-            ;;
-        --vcpus)
-            VCPUS="$2"
-            shift 2
-            ;;
-        --ebs-size)
-            EBS_VOLUME_SIZE="$2"
-            shift 2
-            ;;
-        --memory)
-            MEMORY="$2"
-            shift 2
-            ;;
-        --instance-types)
-            INSTANCE_TYPES="$2"
-            shift 2
-            ;;
-        -h|--help)
-            show_help
-            exit 0
-            ;;
-        -*)
-            echo "Unknown option $1"
-            show_help
-            exit 1
-            ;;
-        *)
-            COMMAND="$1"
-            shift
-            ;;
-    esac
+echo "Using subnet ${SUBNET_ID} and security group ${SG_ID}"
+
+aws ec2 describe-launch-templates --region "${REGION}" --launch-template-names osrm-processor-launch-template &>/dev/null || \
+aws ec2 create-launch-template --region "${REGION}" --launch-template-name osrm-processor-launch-template --launch-template-data '{
+  "BlockDeviceMappings": [{
+    "DeviceName": "/dev/xvda",
+    "Ebs": {"VolumeSize": 500, "VolumeType": "gp3", "DeleteOnTermination": true}
+  }]
+}'
+
+LAUNCH_TEMPLATE_ID=$(aws ec2 describe-launch-templates --region "${REGION}" --launch-template-names osrm-processor-launch-template --query 'LaunchTemplates[0].LaunchTemplateId' --output text)
+
+aws batch describe-compute-environments --region "${REGION}" --compute-environments osrm-processor-compute-env &>/dev/null || {
+  echo "Creating compute environment..."
+  aws batch create-compute-environment \
+    --region "${REGION}" \
+    --compute-environment-name osrm-processor-compute-env \
+    --type MANAGED \
+    --state ENABLED \
+    --compute-resources type=EC2,minvCpus=0,maxvCpus=256,desiredvCpus=0,instanceTypes=m5.large,instanceRole="${INSTANCE_PROFILE_ARN}",subnets="${SUBNET_ID}",securityGroupIds="${SG_ID}",launchTemplate="{launchTemplateId=${LAUNCH_TEMPLATE_ID}}"
+}
+
+echo "Waiting for compute environment..."
+for i in {1..60}; do
+  STATUS=$(aws batch describe-compute-environments --region "${REGION}" --compute-environments osrm-processor-compute-env --query 'computeEnvironments[0].status' --output text 2>/dev/null || echo "NOTFOUND")
+  [[ "$STATUS" == "VALID" ]] && break
+  sleep 2
 done
+echo "Compute environment status: ${STATUS}"
 
-if [[ -z "$COMMAND" ]]; then
-    echo "Error: Command required"
-    show_help
-    exit 1
+if [[ "$STATUS" != "VALID" ]]; then
+  echo "ERROR: Compute environment did not become VALID"
+  exit 1
 fi
 
-# Logging functions
-log() {
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
-}
+echo "Creating job queue..."
+QUEUE_EXISTS=$(aws batch describe-job-queues --region "${REGION}" --job-queues osrm-processor-queue --query 'length(jobQueues)' --output text 2>/dev/null || echo "0")
+if [[ "$QUEUE_EXISTS" == "0" ]]; then
+  aws batch create-job-queue \
+    --region "${REGION}" \
+    --job-queue-name osrm-processor-queue \
+    --state ENABLED \
+    --priority 1 \
+    --compute-environment-order order=1,computeEnvironment=osrm-processor-compute-env
+else
+  echo "Job queue already exists"
+fi
 
-error() {
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
-    exit 1
-}
+echo "Registering job definition..."
+aws batch register-job-definition \
+  --region "${REGION}" \
+  --job-definition-name osrm-processor-job \
+  --type container \
+  --platform-capabilities EC2 \
+  --container-properties "{
+    \"image\": \"${ECR_URI}:latest\",
+    \"vcpus\": 4,
+    \"memory\": 8192,
+    \"executionRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
+    \"jobRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
+    \"ulimits\": [{\"name\": \"nofile\", \"hardLimit\": 65536, \"softLimit\": 65536}]
+  }" \
+  --retry-strategy attempts=3 \
+  --timeout attemptDurationSeconds=7200
 
-# Check if AWS CLI is available
-check_aws_cli() {
-    if ! command -v aws &> /dev/null; then
-        error "AWS CLI not found. Please install AWS CLI and configure credentials."
-    fi
-}
-
-# Check if Docker is available and running
-check_docker() {
-    if ! command -v docker &> /dev/null; then
-        error "Docker not found. Please install Docker."
-    fi
-    
-    if ! docker info >/dev/null 2>&1; then
-        error "Docker daemon not running. Please start Docker."
-    fi
-}
-
-# Build the Docker image
-build_image() {
-    log "Building OSRM AWS Batch image: ${IMAGE_NAME}:${IMAGE_TAG}"
-    
-    cd "${PROJECT_ROOT}"
-    
-    docker build \
-        -f Dockerfile.process-osrm-data \
-        -t "${IMAGE_NAME}:${IMAGE_TAG}" \
-        --build-arg BUILD_CONCURRENCY="${BUILD_CONCURRENCY}" \
-        --build-arg CMAKE_BUILD_TYPE=Release \
-        . || error "Failed to build Docker image"
-    
-    log "Image built successfully: ${IMAGE_NAME}:${IMAGE_TAG}"
-}
-
-# Create ECR repository
-create_ecr_repo() {
-    check_aws_cli
-    
-    log "Creating ECR repository: ${IMAGE_NAME}"
-    
-    # Check if repository already exists
-    if aws ecr describe-repositories --repository-names "${IMAGE_NAME}" --region "${AWS_REGION}" &>/dev/null; then
-        log "ECR repository already exists: ${IMAGE_NAME}"
-    else
-        # Try to create repository
-        log "Repository doesn't exist, creating new ECR repository..."
-        if ! aws ecr create-repository \
-            --repository-name "${IMAGE_NAME}" \
-            --region "${AWS_REGION}" \
-            --image-scanning-configuration scanOnPush=true 2>&1; then
-            error "Failed to create ECR repository. Check that you have ECR permissions (ecr:CreateRepository). Run: aws ecr describe-repositories --region ${AWS_REGION} to test."
-        fi
-        log "✓ ECR repository created successfully"
-    fi
-    
-    # Get repository URI
-    ECR_REGISTRY=$(aws ecr describe-repositories \
-        --repository-names "${IMAGE_NAME}" \
-        --region "${AWS_REGION}" \
-        --query 'repositories[0].repositoryUri' \
-        --output text)
-    
-    if [[ -z "$ECR_REGISTRY" ]]; then
-        error "Failed to get ECR repository URI. Something went wrong."
-    fi
-    
-    log "✓ ECR repository URI: ${ECR_REGISTRY}"
-}
-
-# Push image to ECR
-push_image() {
-    check_aws_cli
-    check_docker
-    
-    if [[ -z "$ECR_REGISTRY" ]]; then
-        error "ECR_REGISTRY not set. Use -r option or create ECR repository first."
-    fi
-    
-    log "Pushing image to ECR: ${ECR_REGISTRY}:${IMAGE_TAG}"
-    
-    # Login to ECR
-    log "Authenticating with ECR..."
-    if ! aws ecr get-login-password --region "${AWS_REGION}" | \
-        docker login --username AWS --password-stdin "${ECR_REGISTRY%/*}" 2>&1; then
-        error "Failed to authenticate with ECR. Check AWS credentials and ECR permissions."
-    fi
-    log "✓ Authenticated with ECR"
-    
-    # Tag and push image
-    log "Tagging image..."
-    if ! docker tag "${IMAGE_NAME}:${IMAGE_TAG}" "${ECR_REGISTRY}:${IMAGE_TAG}"; then
-        error "Failed to tag Docker image"
-    fi
-    
-    log "Pushing image to ECR (this may take several minutes)..."
-    if ! docker push "${ECR_REGISTRY}:${IMAGE_TAG}" 2>&1; then
-        error "Failed to push image to ECR. Check network connection and ECR permissions."
-    fi
-    
-    log "✓ Image pushed successfully: ${ECR_REGISTRY}:${IMAGE_TAG}"
-}
-
-# Create AWS Batch job definition
-create_job_definition() {
-    check_aws_cli
-    
-    if [[ -z "$ECR_REGISTRY" ]]; then
-        error "ECR_REGISTRY not set. Use -r option or create ECR repository first."
-    fi
-    
-    log "Registering AWS Batch job definition: ${JOB_DEFINITION_NAME}"
-    log "Note: This creates a new revision if the job definition already exists"
-    
-    # Get AWS account ID for role ARN
-    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-    EXECUTION_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/BatchEcsTaskExecutionRole"
-    
-    cat > /tmp/job-definition.json << EOF
-{
-    "jobDefinitionName": "${JOB_DEFINITION_NAME}",
-    "type": "container",
-    "platformCapabilities": ["EC2"],
-    "containerProperties": {
-        "image": "${ECR_REGISTRY}:${IMAGE_TAG}",
-        "vcpus": ${VCPUS},
-        "memory": ${MEMORY},
-        "executionRoleArn": "${EXECUTION_ROLE_ARN}",
-        "environment": [
-            {
-                "name": "AWS_DEFAULT_REGION",
-                "value": "${AWS_REGION}"
-            }
-        ],
-        "mountPoints": [],
-        "volumes": [],
-        "ulimits": [
-            {
-                "name": "nofile",
-                "hardLimit": 65536,
-                "softLimit": 65536
-            }
-        ]
-    },
-    "retryStrategy": {
-        "attempts": 3
-    },
-    "timeout": {
-        "attemptDurationSeconds": 7200
-    }
-}
-EOF
-    
-    if ! aws batch register-job-definition \
-        --cli-input-json file:///tmp/job-definition.json \
-        --region "${AWS_REGION}" 2>&1; then
-        rm /tmp/job-definition.json
-        error "Failed to register AWS Batch job definition. Check that you have Batch permissions (batch:RegisterJobDefinition)."
-    fi
-    
-    rm /tmp/job-definition.json
-    
-    # Get the new revision number
-    REVISION=$(aws batch describe-job-definitions \
-        --job-definition-name "${JOB_DEFINITION_NAME}" \
-        --status ACTIVE \
-        --region "${AWS_REGION}" \
-        --query 'jobDefinitions[0].revision' \
-        --output text 2>/dev/null)
-    
-    log "✓ Job definition registered: ${JOB_DEFINITION_NAME}:${REVISION}"
-}
-
-# Create compute environment and job queue
-create_queue() {
-    check_aws_cli
-    
-    log "Creating compute environment: ${COMPUTE_ENV_NAME}"
-    
-    # Get subnet and security group
-    log "Finding default VPC subnet and security group..."
-    SUBNET_ID=$(aws ec2 describe-subnets --query 'Subnets[0].SubnetId' --output text 2>&1)
-    if [[ -z "$SUBNET_ID" || "$SUBNET_ID" == "None" ]]; then
-        error "No subnets found. You need a VPC with at least one subnet. Check AWS console."
-    fi
-    
-    SG_ID=$(aws ec2 describe-security-groups --filters Name=group-name,Values=default --query 'SecurityGroups[0].GroupId' --output text 2>&1)
-    if [[ -z "$SG_ID" || "$SG_ID" == "None" ]]; then
-        error "No default security group found. Check your VPC configuration."
-    fi
-    
-    log "Using subnet: ${SUBNET_ID}, security group: ${SG_ID}"
-    
-    # Check if compute environment already exists
-    local existing_status=$(aws batch describe-compute-environments \
-        --compute-environments "${COMPUTE_ENV_NAME}" \
-        --region "${AWS_REGION}" \
-        --query 'computeEnvironments[0].status' \
-        --output text 2>/dev/null)
-    
-    if [[ -n "$existing_status" && "$existing_status" != "None" ]]; then
-        log "⚠️  Compute environment already exists with status: ${existing_status}"
-        log "⚠️  WARNING: Cannot update launch template on existing compute environment!"
-        log "⚠️  To apply ${EBS_VOLUME_SIZE}GB storage, you must delete and recreate:"
-        log "    1. aws batch update-job-queue --job-queue ${QUEUE_NAME} --state DISABLED"
-        log "    2. aws batch delete-job-queue --job-queue ${QUEUE_NAME}"
-        log "    3. aws batch update-compute-environment --compute-environment ${COMPUTE_ENV_NAME} --state DISABLED"
-        log "    4. aws batch delete-compute-environment --compute-environment ${COMPUTE_ENV_NAME}"
-        log "    5. Re-run this script"
-        log "Continuing with existing compute environment..."
-    else
-        # Create or update launch template with larger EBS volume
-        log "Setting up launch template with ${EBS_VOLUME_SIZE}GB EBS volume..."
-        LAUNCH_TEMPLATE_NAME="osrm-launch-template-${COMPUTE_ENV_NAME}"
-        
-        # Check if launch template exists
-        if aws ec2 describe-launch-templates \
-            --launch-template-names "${LAUNCH_TEMPLATE_NAME}" \
-            --region "${AWS_REGION}" &>/dev/null; then
-            
-            log "Launch template exists, creating new version with ${EBS_VOLUME_SIZE}GB..."
-            aws ec2 create-launch-template-version \
-                --launch-template-name "${LAUNCH_TEMPLATE_NAME}" \
-                --launch-template-data '{
-                    "BlockDeviceMappings": [
-                        {
-                            "DeviceName": "/dev/xvda",
-                            "Ebs": {
-                                "VolumeSize": '"${EBS_VOLUME_SIZE}"',
-                                "VolumeType": "gp3",
-                                "DeleteOnTermination": true
-                            }
-                        }
-                    ]
-                }' \
-                --region "${AWS_REGION}" 2>&1 || error "Failed to create launch template version"
-            
-            # Set the new version as default
-            aws ec2 modify-launch-template \
-                --launch-template-name "${LAUNCH_TEMPLATE_NAME}" \
-                --default-version '$Latest' \
-                --region "${AWS_REGION}" 2>&1 || error "Failed to set default launch template version"
-            
-            log "✓ Updated launch template to ${EBS_VOLUME_SIZE}GB"
-        else
-            log "Creating new launch template..."
-            aws ec2 create-launch-template \
-                --launch-template-name "${LAUNCH_TEMPLATE_NAME}" \
-                --launch-template-data '{
-                    "BlockDeviceMappings": [
-                        {
-                            "DeviceName": "/dev/xvda",
-                            "Ebs": {
-                                "VolumeSize": '"${EBS_VOLUME_SIZE}"',
-                                "VolumeType": "gp3",
-                                "DeleteOnTermination": true
-                            }
-                        }
-                    ]
-                }' \
-                --region "${AWS_REGION}" 2>&1 || error "Failed to create launch template"
-            
-            log "✓ Created launch template with ${EBS_VOLUME_SIZE}GB"
-        fi
-        
-        # Get launch template ID
-        LAUNCH_TEMPLATE_ID=$(aws ec2 describe-launch-templates \
-            --launch-template-names "${LAUNCH_TEMPLATE_NAME}" \
-            --region "${AWS_REGION}" \
-            --query 'LaunchTemplates[0].LaunchTemplateId' \
-            --output text 2>&1)
-        
-        log "Using launch template: ${LAUNCH_TEMPLATE_ID}"
-        
-        # Get or create instance profile
-        INSTANCE_PROFILE_ARN=$(aws iam get-instance-profile --instance-profile-name ecsInstanceRole --query 'InstanceProfile.Arn' --output text 2>/dev/null || true)
-        if [[ -z "$INSTANCE_PROFILE_ARN" ]]; then
-            log "Creating ecsInstanceRole instance profile..."
-            # Create role if it doesn't exist
-            if ! aws iam get-role --role-name ecsInstanceRole &>/dev/null; then
-                aws iam create-role \
-                    --role-name ecsInstanceRole \
-                    --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":["ec2.amazonaws.com"]},"Action":["sts:AssumeRole"]}]}' 2>&1
-                aws iam attach-role-policy \
-                    --role-name ecsInstanceRole \
-                    --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role 2>&1
-            fi
-            # Create instance profile
-            aws iam create-instance-profile --instance-profile-name ecsInstanceRole 2>&1
-            aws iam add-role-to-instance-profile --instance-profile-name ecsInstanceRole --role-name ecsInstanceRole 2>&1
-            sleep 10  # Wait for IAM propagation
-            INSTANCE_PROFILE_ARN=$(aws iam get-instance-profile --instance-profile-name ecsInstanceRole --query 'InstanceProfile.Arn' --output text)
-            log "✓ Created instance profile"
-        else
-            log "Using existing instance profile: ecsInstanceRole"
-        fi
-        
-        # Create compute environment with launch template
-        log "Creating new compute environment with ${EBS_VOLUME_SIZE}GB storage..."
-        if ! aws batch create-compute-environment \
-            --compute-environment-name "${COMPUTE_ENV_NAME}" \
-            --type MANAGED \
-            --state ENABLED \
-            --compute-resources type=EC2,minvCpus=0,maxvCpus=256,desiredvCpus=0,instanceTypes="${INSTANCE_TYPES}",instanceRole="${INSTANCE_PROFILE_ARN}",subnets="${SUBNET_ID}",securityGroupIds="${SG_ID}",launchTemplate="{launchTemplateId=${LAUNCH_TEMPLATE_ID}}" \
-            --region "${AWS_REGION}" 2>&1; then
-            error "Failed to create compute environment. Check that you have Batch and EC2 permissions."
-        fi
-        log "✓ Compute environment creation initiated"
-    fi
-    
-    # Wait for compute environment to be ready (manual polling since wait command not available in all AWS CLI versions)
-    log "Waiting for compute environment to be ready (may take 30-60 seconds)..."
-    local max_attempts=30
-    local attempt=0
-    local status=""
-    
-    while [ $attempt -lt $max_attempts ]; do
-        status=$(aws batch describe-compute-environments \
-            --compute-environments "${COMPUTE_ENV_NAME}" \
-            --region "${AWS_REGION}" \
-            --query 'computeEnvironments[0].status' \
-            --output text 2>&1)
-        
-        if [[ "$status" == "VALID" ]]; then
-            log "✓ Compute environment is ready"
-            break
-        elif [[ "$status" == "INVALID" ]]; then
-            local reason=$(aws batch describe-compute-environments \
-                --compute-environments "${COMPUTE_ENV_NAME}" \
-                --region "${AWS_REGION}" \
-                --query 'computeEnvironments[0].statusReason' \
-                --output text 2>&1)
-            error "Compute environment is INVALID. Reason: ${reason}"
-        fi
-        
-        attempt=$((attempt + 1))
-        if [ $attempt -lt $max_attempts ]; then
-            echo -n "."
-            sleep 2
-        fi
-    done
-    
-    if [[ "$status" != "VALID" ]]; then
-        error "Compute environment did not become ready after ${max_attempts} attempts. Current status: ${status}. Check AWS Batch console."
-    fi
-    
-    # Check if job queue already exists
-    if aws batch describe-job-queues --job-queues "${QUEUE_NAME}" --region "${AWS_REGION}" --query 'jobQueues[0]' --output text &>/dev/null; then
-        log "Job queue already exists: ${QUEUE_NAME}"
-    else
-        log "Creating job queue: ${QUEUE_NAME}"
-        # Create job queue
-        if ! aws batch create-job-queue \
-            --job-queue-name "${QUEUE_NAME}" \
-            --state ENABLED \
-            --priority 1 \
-            --compute-environment-order order=1,computeEnvironment="${COMPUTE_ENV_NAME}" \
-            --region "${AWS_REGION}" 2>&1; then
-            error "Failed to create job queue. Check Batch permissions."
-        fi
-        log "✓ Job queue created"
-    fi
-    
-    log "✓ Job queue ready: ${QUEUE_NAME}"
-}
-
-# Test image locally
-test_local() {
-    check_docker
-    
-    log "Testing OSRM AWS Batch image locally"
-    
-    # Test help
-    docker run --rm "${IMAGE_NAME}:${IMAGE_TAG}" \
-        bash -c 'OSRM_OPERATION=help /scripts/Dockerfile.process-osrm-data.entrypoint.sh'
-    
-    # Test binary availability
-    docker run --rm "${IMAGE_NAME}:${IMAGE_TAG}" \
-        /usr/local/bin/osrm-extract --help | head -5
-    
-    log "Local test completed successfully"
-}
-
-# Clean up local images
-clean_images() {
-    check_docker
-    
-    log "Cleaning up local Docker images"
-    
-    docker rmi "${IMAGE_NAME}:${IMAGE_TAG}" 2>/dev/null || true
-    docker system prune -f
-    
-    log "Cleanup completed"
-}
-
-# Execute command
-case "$COMMAND" in
-    build)
-        check_docker
-        build_image
-        ;;
-    push)
-        push_image
-        ;;
-    create-ecr)
-        create_ecr_repo
-        ;;
-    build-and-push)
-        check_docker
-        build_image
-        if [[ -z "$ECR_REGISTRY" ]]; then
-            create_ecr_repo
-        fi
-        push_image
-        ;;
-    create-job-def)
-        create_job_definition
-        ;;
-    create-queue)
-        create_queue
-        ;;
-    setup-full)
-        check_docker
-        check_aws_cli
-        build_image
-        if [[ -z "$ECR_REGISTRY" ]]; then
-            create_ecr_repo
-        fi
-        push_image
-        create_job_definition
-        create_queue
-        log "Full setup completed successfully!"
-        log "Job Definition: ${JOB_DEFINITION_NAME}"
-        log "Job Queue: ${QUEUE_NAME}"
-        log "Image: ${ECR_REGISTRY}:${IMAGE_TAG}"
-        ;;
-    test-local)
-        test_local
-        ;;
-    clean)
-        clean_images
-        ;;
-    *)
-        echo "Unknown command: $COMMAND"
-        show_help
-        exit 1
-        ;;
-esac
+echo "Setup complete"
