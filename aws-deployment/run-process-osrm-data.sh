@@ -28,7 +28,6 @@ docker run --rm --platform linux/amd64 \
     -v "$SCRIPT_DIR/output:/output:rw" \
     -v "$SCRIPT_DIR/logs:/logs:rw" \
     -v "$awsdir:/root/.aws:ro" \
-    -v "$SCRIPT_DIR/data:/data:rw" \
     -e "OSM_SOURCE=$osm_source" \
     -e "OSM_FILE=$osm_file" \
     -e "AWS_DEFAULT_REGION=us-east-1" \
