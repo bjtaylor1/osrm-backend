@@ -48,6 +48,6 @@ for osm_file in "${files_to_process[@]}"; do
     
     log_progress "Uploading ${file_name}"
     for file in "${base_name}".osrm*; do
-        aws s3 cp "$file" "s3://my-osrm-data-715/output/$(basename "$file")"
+        aws s3 cp --no-progress "$file" "s3://my-osrm-data-715/output/$(basename "$file")"
     done
 done
