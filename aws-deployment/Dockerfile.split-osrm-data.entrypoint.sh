@@ -18,11 +18,12 @@ source ./aws-deployment/split-osm.sh || handle_error "Could not source split-osm
 
 if [ ! -f "/data/nomount.flag" ]; then 
     echo "nomount.flag doesn't exist"
+    lsblk
     # setup big disk and swap space (if not running locally):
-    INSTANCE_STORE_DEV=$(lsblk -d -n -o NAME,TYPE | grep disk | grep nvme | head -1 | awk '{print $1}')
+    INSTANCE_STORE_DEV=$(lsblk -d -n -o NAME,MOUNTPOINT | grep nvme | grep -v '/$' | head -1 | awk '{print $1}')
     if [[ -n "$INSTANCE_STORE_DEV" ]]; then
-        log_progress "Formatting instance store..."
-        mkfs.ext4 -F /dev/$INSTANCE_STORE_DEV
+        log_progress "Formatting instance store $INSTANCE_STORE_DEV"
+        mkfs /dev/$INSTANCE_STORE_DEV
         mount /dev/$INSTANCE_STORE_DEV /data
 
         log_progress "Creating swap space"
@@ -31,7 +32,7 @@ if [ ! -f "/data/nomount.flag" ]; then
         mkswap /data/swapfile
         swapon /data/swapfile
 
-        du -h /data
+        df -h
 
     else
         lsblk

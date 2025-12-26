@@ -45,6 +45,7 @@ aws batch register-job-definition \
     \"image\": \"${ECR_URI_PROCESS}:latest\",
     \"vcpus\": 2,
     \"memory\": 8192,
+    \"privileged\": true,
     \"executionRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
     \"jobRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
     \"ulimits\": [{\"name\": \"nofile\", \"hardLimit\": 65536, \"softLimit\": 65536}]
@@ -61,6 +62,7 @@ aws batch register-job-definition \
     \"image\": \"${ECR_URI_SPLIT}:latest\",
     \"vcpus\": 2,
     \"memory\": 8192,
+    \"privileged\": true,
     \"executionRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
     \"jobRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
     \"ulimits\": [{\"name\": \"nofile\", \"hardLimit\": 65536, \"softLimit\": 65536}]
