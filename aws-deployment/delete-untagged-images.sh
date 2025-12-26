@@ -2,7 +2,7 @@
 
 set -e
 
-REPO_NAME="osrm-process-data"
+REPO_NAME="${1:-osrm-processor}"
 REGION="us-east-1"
 
 echo "Fetching untagged images..."

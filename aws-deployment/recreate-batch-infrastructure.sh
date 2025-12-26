@@ -136,13 +136,13 @@ fi
 # Step 3: Get ECR registry
 log "Step 3/5: Getting ECR registry URL"
 ECR_REGISTRY=$(aws ecr describe-repositories \
-    --repository-names osrm-process-data \
+    --repository-names osrm-processor \
     --region "${AWS_REGION}" \
     --query 'repositories[0].repositoryUri' \
     --output text 2>/dev/null)
 
 if [[ -z "$ECR_REGISTRY" ]]; then
-    error "ECR repository 'osrm-process-data' not found. Run setup-aws-batch.sh create-ecr first."
+    error "ECR repository 'osrm-processor' not found. Run setup-aws-batch-part1.sh first."
 fi
 
 log "Using ECR registry: ${ECR_REGISTRY}"
