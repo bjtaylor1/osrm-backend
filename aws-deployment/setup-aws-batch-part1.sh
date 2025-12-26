@@ -7,13 +7,13 @@ REGION=$(aws configure get region || echo "us-east-1")
 
 echo "Setting up AWS Batch resources (Part 1) in ${REGION}"
 
-if aws ecr describe-repositories --repository-names osrm-processor --region "${REGION}" --query 'repositories[0].repositoryName' --output text; then
-  echo "ECR repository already exists"
-else
-  aws ecr create-repository --repository-name osrm-processor --region "${REGION}" --image-scanning-configuration scanOnPush=true
-fi
-
-ECR_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/osrm-processor"
+for REPO_NAME in osrm-processor osrm-split; do
+  if aws ecr describe-repositories --repository-names "${REPO_NAME}" --region "${REGION}" --query 'repositories[0].repositoryName' --output text; then
+    echo "ECR repository ${REPO_NAME} already exists"
+  else
+    aws ecr create-repository --repository-name "${REPO_NAME}" --region "${REGION}" --image-scanning-configuration scanOnPush=true
+  fi
+done
 
 if aws iam get-role --role-name OSRMBatchExecutionRole --query 'Role.RoleName' --output text; then
   echo "IAM role already exists"
@@ -73,7 +73,7 @@ else
     --compute-environment-name osrm-processor-compute-env \
     --type MANAGED \
     --state ENABLED \
-    --compute-resources type=EC2,minvCpus=0,maxvCpus=256,desiredvCpus=0,instanceTypes=m5.xlarge,m5.2xlarge,c5.xlarge,c5.2xlarge,instanceRole="${INSTANCE_PROFILE_ARN}",subnets="${SUBNET_ID}",securityGroupIds="${SG_ID}",launchTemplate="{launchTemplateId=${LAUNCH_TEMPLATE_ID}}"
+    --compute-resources type=EC2,minvCpus=0,maxvCpus=256,desiredvCpus=0,instanceTypes=i3.large,instanceRole="${INSTANCE_PROFILE_ARN}",subnets="${SUBNET_ID}",securityGroupIds="${SG_ID}",launchTemplate="{launchTemplateId=${LAUNCH_TEMPLATE_ID}}"
 fi
 
 echo ""
