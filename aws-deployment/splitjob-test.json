@@ -1,0 +1,11 @@
+{
+  "jobName": "split-monaco-data",
+  "jobQueue": "osrm-processor-queue",
+  "jobDefinition": "osrm-split-job",
+  "containerOverrides": {
+    "environment": [
+      {"name": "OSM_SOURCE", "value": "http://download.geofabrik.de/europe/monaco-latest.osm.pbf" },
+      {"name": "OSM_FILE", "value": "monaco-latest"}
+    ]
+  }
+}
