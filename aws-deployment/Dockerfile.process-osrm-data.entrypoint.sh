@@ -47,38 +47,25 @@ cd /data
 # Enable nullglob so non-matching patterns expand to nothing instead of literal string
 shopt -s nullglob
 
-# Process each split file
-poly_files=("/src/config/$OSM_FILE".*.poly)
+pbf_file="${BASE_NAME?}.osm.pbf"
+#e.g. monaco-latest.a
 
-# Check if any files were found
-if [ ${#poly_files[@]} -eq 0 ]; then
-    handle_error "No .poly files found matching pattern: /src/config/$OSM_FILE.*.poly"
-fi
+aws s3 cp --no-progress "s3://my-osrm-data-715/output/${pbf_file}" "$pbf_file"
+log_progress "Extracting ${BASE_NAME?}"
+osrm-extract \
+    "$pbf_file" \
+    --profile "/src/profiles/${PROFILE?}.lua" \
+    --threads "$(nproc)" \
+    ${EXTRACT_EXTRA_ARGS:-} || handle_error "osrm-extract failed"
 
-log_progress "Found ${#poly_files[@]} split file(s) to process"
+log_progress "Contracting ${BASE_NAME?}"
+osrm-contract \
+    "${BASE_NAME}.osrm" \
+    --threads "$(nproc)" \
+    ${CONTRACT_EXTRA_ARGS:-} || handle_error "osrm-contract failed"
 
-for split_file in "${poly_files[@]}"; do
-    file_name=$(basename "$split_file" .poly)
-    # e.g. monaco-latest.a
-
-    pbf_file="${file_name}.osm.pbf"
-    #e.g. monaco-latest.a.osm.pbf
-
-    aws s3 cp --no-progress "s3://my-osrm-data-715/output/$pbf_file" "$pbf_file"
-    osrm-extract \
-        "$pbf_file" \
-        --profile "/src/profiles/${PROFILE?}.lua" \
-        --threads "$(nproc)" \
-        ${EXTRACT_EXTRA_ARGS:-}
-    
-    log_progress "Contracting ${file_name}"
-    osrm-contract \
-        "${file_name}.osrm" \
-        --threads "$(nproc)" \
-        ${CONTRACT_EXTRA_ARGS:-}
-    
-    log_progress "Uploading ${file_name}"
-    for file in "${file_name}".osrm*; do
-        aws s3 cp --no-progress "$file" "s3://my-osrm-data/output/$(basename "$file")"
-    done
+log_progress "Uploading ${BASE_NAME?} output files..."
+for file in "${BASE_NAME}".osrm*; do
+    aws s3 cp --no-progress "$file" "s3://my-osrm-data-715/output/$(basename "$file")"
 done
+log_progress "Finished processing ${BASE_NAME?}"

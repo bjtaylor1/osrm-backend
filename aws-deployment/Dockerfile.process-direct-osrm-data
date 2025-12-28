@@ -1,0 +1,78 @@
+# OSRM AWS Batch Dockerfile - Direct Processing
+FROM debian:bookworm-slim AS builder
+
+ARG DOCKER_TAG=aws-batch
+ARG BUILD_CONCURRENCY
+ARG CMAKE_BUILD_TYPE=Release
+ARG ENABLE_ASSERTIONS=Off
+
+# Install build dependencies
+RUN mkdir -p /src && \
+    apt-get update && \
+    apt-get -y --no-install-recommends --no-install-suggests install \
+        ca-certificates \
+        cmake \
+        g++ \
+        gcc \
+        git \
+        libboost1.81-all-dev \
+        libbz2-dev \
+        liblua5.4-dev \
+        libtbb-dev \
+        libxml2-dev \
+        libzip-dev \
+        lua5.4 \
+        make \
+        pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy source code
+COPY . /src
+WORKDIR /src
+
+RUN chmod +x ./aws-deployment/*.sh
+
+# Build OSRM
+RUN NPROC=${BUILD_CONCURRENCY:-$(nproc)} && \
+    export CXXFLAGS="-Wno-array-bounds -Wno-uninitialized -Wno-stringop-overflow -O3 -march=x86-64 -mtune=generic" && \
+    mkdir -p build && \
+    cd build && \
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+        -DENABLE_ASSERTIONS=${ENABLE_ASSERTIONS} \
+        -DENABLE_LTO=Off \
+        -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG -march=x86-64" \
+        -DCMAKE_EXE_LINKER_FLAGS="-s" && \  
+    make -j2 install && \
+    cd .. && \
+    strip /usr/local/bin/*
+
+FROM debian:bookworm-slim AS production
+
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y \
+        expat \
+        libboost-date-time1.81.0 \
+        libboost-iostreams1.81.0 \
+        libboost-program-options1.81.0 \
+        libboost-thread1.81.0 \
+        liblua5.4-0 \
+        libtbb12 \
+        awscli \
+        ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    ldconfig /usr/local/lib
+
+COPY --from=builder /usr/local /usr/local
+COPY --from=builder /src /src
+
+RUN mkdir -p /data /output /logs
+
+ENV MALLOC_MMAP_THRESHOLD_=1048576
+ENV MALLOC_TRIM_THRESHOLD_=134217728
+ENV LUA_PATH="/profiles/?.lua"
+
+WORKDIR /src
+
+ENTRYPOINT ["./aws-deployment/Dockerfile.process-direct-osrm-data.entrypoint.sh"]

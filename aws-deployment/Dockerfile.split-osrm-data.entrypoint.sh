@@ -14,7 +14,7 @@ log_progress() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
 }
 
-source ./aws-deployment/split-osm.sh || handle_error "Could not source split-osm.sh"
+env
 
 if [ ! -f "/data/nomount.flag" ]; then 
     echo "nomount.flag doesn't exist"
@@ -52,10 +52,37 @@ md5sum -c "${OSM_FILE?}.osm.pbf.md5"
 
 # Split
 log_progress "Splitting ${OSM_FILE}.osm.pbf"
-mapfile -t files_to_process < <(split_osm "/data/${OSM_FILE}.osm.pbf")
 
-# Process each split file
-for split_file in "${files_to_process[@]}"; do
-    remote_file="s3://my-osrm-data-715/output/$(basename "$split_file")"
-    aws s3 cp --no-progress "$split_file" "$remote_file"
-done
+INPUT_FILE="/data/${OSM_FILE}.osm.pbf"
+BASE_NAME="${INPUT_FILE%.osm.pbf}"
+REGION_NAME=$(basename "$BASE_NAME")
+
+# Find poly files for this region
+POLY_FILES=(/src/aws-deployment/config/${REGION_NAME}.*.poly)
+
+# If no poly files exist, skip splitting
+if [[ ! -f "${POLY_FILES[0]}" ]]; then
+    log_progress "No poly files found for ${REGION_NAME}, skipping split"
+else
+    log_progress "Found ${#POLY_FILES[@]} poly files for splitting"
+    
+    # Process each poly file
+    for poly_file in "${POLY_FILES[@]}"; do
+        NAME=$(basename "$poly_file" .poly)
+        OUTPUT_FILE="/data/${NAME}.osm.pbf"
+        
+        log_progress "Extracting ${NAME} to /data"
+        log_progress "using JAVACMD_OPTIONS: $JAVACMD_OPTIONS"
+        
+        osmosis --read-pbf "$INPUT_FILE" \
+                --bounding-polygon file="$poly_file" \
+                --write-pbf "$OUTPUT_FILE" \
+                || handle_error "Failed to split ${NAME}"
+        
+        log_progress "Successfully split $NAME"
+        aws s3 cp "$OUTPUT_FILE" "s3://my-osrm-data-715/output/${NAME}.osm.pbf"
+        md5sum $OUTPUT_FILE
+        log_progress "Successfully uploaded $NAME to S3"
+        rm $OUTPUT_FILE
+    done
+fi

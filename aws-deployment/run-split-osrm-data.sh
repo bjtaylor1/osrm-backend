@@ -32,6 +32,7 @@ docker run --rm --platform linux/amd64 \
     -v "$awsdir:/root/.aws:ro" \
     -e "OSM_SOURCE=$osm_source" \
     -e "OSM_FILE=$osm_file" \
+    -e "JAVACMD_OPTIONS=-Xmx50G -server" \
     -e "AWS_DEFAULT_REGION=us-east-1" \
     -e "AWS_PROFILE=gpxeditoradmin" \
     osrm-split-data:latest

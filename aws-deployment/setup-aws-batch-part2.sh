@@ -20,6 +20,7 @@ if [[ "$STATUS" != "VALID" ]]; then
 fi
 
 ECR_URI_PROCESS="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/osrm-processor"
+ECR_URI_DIRECT_PROCESS="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/osrm-direct-processor"
 ECR_URI_SPLIT="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/osrm-split"
 
 echo "Creating job queue..."
@@ -43,6 +44,23 @@ aws batch register-job-definition \
   --platform-capabilities EC2 \
   --container-properties "{
     \"image\": \"${ECR_URI_PROCESS}:latest\",
+    \"vcpus\": 2,
+    \"memory\": 8192,
+    \"privileged\": true,
+    \"executionRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
+    \"jobRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
+    \"ulimits\": [{\"name\": \"nofile\", \"hardLimit\": 65536, \"softLimit\": 65536}]
+  }" \
+  --retry-strategy attempts=3 \
+  --timeout attemptDurationSeconds=86400
+
+aws batch register-job-definition \
+  --region "${REGION}" \
+  --job-definition-name osrm-direct-processor-job \
+  --type container \
+  --platform-capabilities EC2 \
+  --container-properties "{
+    \"image\": \"${ECR_URI_DIRECT_PROCESS}:latest\",
     \"vcpus\": 2,
     \"memory\": 8192,
     \"privileged\": true,

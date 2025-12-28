@@ -7,7 +7,7 @@ REGION=$(aws configure get region || echo "us-east-1")
 
 echo "Setting up AWS Batch resources (Part 1) in ${REGION}"
 
-for REPO_NAME in osrm-processor osrm-split; do
+for REPO_NAME in osrm-processor osrm-direct-processor osrm-split; do
   if aws ecr describe-repositories --repository-names "${REPO_NAME}" --region "${REGION}" --query 'repositories[0].repositoryName' --output text; then
     echo "ECR repository ${REPO_NAME} already exists"
   else

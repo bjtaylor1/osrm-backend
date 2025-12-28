@@ -5,7 +5,8 @@
   "containerOverrides": {
     "environment": [
       {"name": "OSM_SOURCE", "value": "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf" },
-      {"name": "OSM_FILE", "value": "planet-latest"}
+      {"name": "OSM_FILE", "value": "planet-latest"},
+      {"name": "JAVACMD_OPTIONS", "value": "-Xmx50G -server"}
     ]
   }
 }
