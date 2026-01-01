@@ -27,7 +27,8 @@ if [ ! -f "/data/nomount.flag" ]; then
         mount /dev/$INSTANCE_STORE_DEV /data
 
         log_progress "Creating swap space"
-        dd if=/dev/zero of=/data/swapfile bs=1G count=50
+        dd if=/dev/zero of=/data/swapfile bs=1G count=100
+        ls -lh /data/swapfile
         chmod 600 /data/swapfile
         mkswap /data/swapfile
         swapon /data/swapfile

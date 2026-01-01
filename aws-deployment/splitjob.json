@@ -1,6 +1,6 @@
 {
   "jobName": "split-planet-data",
-  "jobQueue": "osrm-processor-queue",
+  "jobQueue": "job-queue-i3-large",
   "jobDefinition": "osrm-split-job",
   "containerOverrides": {
     "environment": [

@@ -61,24 +61,27 @@ fi
 
 LAUNCH_TEMPLATE_ID=$(aws ec2 describe-launch-templates --region "${REGION}" --launch-template-names osrm-processor-launch-template --query 'LaunchTemplates[0].LaunchTemplateId' --output text)
 
-COMPUTE_ENV_NAME=$(aws batch describe-compute-environments --region "${REGION}" --compute-environments osrm-processor-compute-env --query 'computeEnvironments[0].computeEnvironmentName' --output text)
-echo "Compute env check returned: '${COMPUTE_ENV_NAME}'"
+for instance_type in i3.large i3.xlarge; do
+  compute_env_to_create="compute-env-${instance_type//./-}"
+  COMPUTE_ENV_NAME=$(aws batch describe-compute-environments --region "${REGION}" --compute-environments $compute_env_to_create --query 'computeEnvironments[0].computeEnvironmentName' --output text)
+  echo "Compute env check returned: '${COMPUTE_ENV_NAME}'"
 
-if [[ "${COMPUTE_ENV_NAME}" == "osrm-processor-compute-env" ]]; then
-  echo "Compute environment already exists"
-else
-  echo "Creating compute environment..."
-  aws batch create-compute-environment \
-    --region "${REGION}" \
-    --compute-environment-name osrm-processor-compute-env \
-    --type MANAGED \
-    --state ENABLED \
-    --compute-resources type=EC2,minvCpus=0,maxvCpus=256,desiredvCpus=0,instanceTypes=i3.large,instanceRole="${INSTANCE_PROFILE_ARN}",subnets="${SUBNET_ID}",securityGroupIds="${SG_ID}",launchTemplate="{launchTemplateId=${LAUNCH_TEMPLATE_ID}}"
-fi
+  if [[ "${COMPUTE_ENV_NAME}" == "$compute_env_to_create" ]]; then
+    echo "Compute environment $compute_env_to_create already exists"
+  else
+    echo "Creating compute environment..."
+    aws batch create-compute-environment \
+      --region "${REGION}" \
+      --compute-environment-name $compute_env_to_create \
+      --type MANAGED \
+      --state ENABLED \
+      --compute-resources type=EC2,minvCpus=0,maxvCpus=256,desiredvCpus=0,instanceTypes=${instance_type},instanceRole="${INSTANCE_PROFILE_ARN}",subnets="${SUBNET_ID}",securityGroupIds="${SG_ID}",launchTemplate="{launchTemplateId=${LAUNCH_TEMPLATE_ID}}"
+  fi
+done
 
 echo ""
 echo "Part 1 complete. The compute environment is being created."
 echo "Check its status in the AWS Console or run:"
-echo "  aws batch describe-compute-environments --region ${REGION} --compute-environments osrm-processor-compute-env --query 'computeEnvironments[0].status'"
+echo "  aws batch describe-compute-environments --region ${REGION} --compute-environments compute-env-i3large --query 'computeEnvironments[0].status'"
 echo ""
 echo "Once the status is 'VALID', run: ./setup-aws-batch-part2.sh"

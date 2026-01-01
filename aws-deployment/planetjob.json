@@ -1,6 +1,6 @@
 {
   "jobName": "process-planet-data",
-  "jobQueue": "osrm-processor-queue",
+  "jobQueue": "job-queue-i3-xlarge",
   "jobDefinition": "osrm-processor-job",
   "containerOverrides": {
     "environment": [
