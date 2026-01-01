@@ -20,25 +20,41 @@ if [ ! -f "/data/nomount.flag" ]; then
     echo "nomount.flag doesn't exist"
     lsblk
     # setup big disk and swap space (if not running locally):
-    INSTANCE_STORE_DEV=$(lsblk -d -n -o NAME,MOUNTPOINT | grep nvme | grep -v '/$' | head -1 | awk '{print $1}')
-    if [[ -n "$INSTANCE_STORE_DEV" ]]; then
-        log_progress "Formatting instance store $INSTANCE_STORE_DEV"
-        mkfs /dev/$INSTANCE_STORE_DEV
-        mount /dev/$INSTANCE_STORE_DEV /data
-
-        log_progress "Creating swap space"
-        dd if=/dev/zero of=/data/swapfile bs=1G count=100
-        ls -lh /data/swapfile
-        chmod 600 /data/swapfile
-        mkswap /data/swapfile
-        swapon /data/swapfile
-
-        df -h
-
-    else
+    
+    # Find all unmounted NVMe instance store devices (excluding root)
+    mapfile -t NVME_DEVS < <(lsblk -d -n -o NAME,MOUNTPOINT | grep nvme | grep -v '/$' | awk '{print "/dev/" $1}')
+    
+    if [[ ${#NVME_DEVS[@]} -eq 0 ]]; then
         lsblk
         handle_error "Instance store not found - exiting. We need the instance store to process the large amount of data"
+    elif [[ ${#NVME_DEVS[@]} -eq 1 ]]; then
+        # Single drive - format and mount directly
+        log_progress "Found 1 NVMe drive: ${NVME_DEVS[0]}"
+        mkfs.ext4 -F ${NVME_DEVS[0]}
+        mount ${NVME_DEVS[0]} /data
+    else
+        # Multiple drives - create RAID 0 for maximum performance
+        log_progress "Found ${#NVME_DEVS[@]} NVMe drives: ${NVME_DEVS[*]}"
+        log_progress "Creating RAID 0 array for maximum performance"
+        
+        mdadm --create /dev/md0 \
+            --level=0 \
+            --raid-devices=${#NVME_DEVS[@]} \
+            ${NVME_DEVS[@]}
+        
+        log_progress "Formatting RAID array"
+        mkfs.ext4 -F /dev/md0
+        mount /dev/md0 /data
     fi
+    
+    log_progress "Creating swap space"
+    dd if=/dev/zero of=/data/swapfile bs=1G count=100
+    ls -lh /data/swapfile
+    chmod 600 /data/swapfile
+    mkswap /data/swapfile
+    swapon /data/swapfile
+
+    df -h
 else
     log_progress "nomount.flag exists (must be running locally)"
 fi

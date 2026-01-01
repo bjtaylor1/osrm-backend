@@ -61,7 +61,7 @@ fi
 
 LAUNCH_TEMPLATE_ID=$(aws ec2 describe-launch-templates --region "${REGION}" --launch-template-names osrm-processor-launch-template --query 'LaunchTemplates[0].LaunchTemplateId' --output text)
 
-for instance_type in i3.large i3.xlarge; do
+for instance_type in i3.large i3.xlarge r5d.16xlarge; do
   compute_env_to_create="compute-env-${instance_type//./-}"
   COMPUTE_ENV_NAME=$(aws batch describe-compute-environments --region "${REGION}" --compute-environments $compute_env_to_create --query 'computeEnvironments[0].computeEnvironmentName' --output text)
   echo "Compute env check returned: '${COMPUTE_ENV_NAME}'"

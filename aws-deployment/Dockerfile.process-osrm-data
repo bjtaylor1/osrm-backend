@@ -67,7 +67,8 @@ RUN apt-get update && \
         ca-certificates \
         procps \
         osmosis \
-        wget && \
+        wget \
+        mdadm && \
     rm -rf /var/lib/apt/lists/* && \
     ldconfig /usr/local/lib
 

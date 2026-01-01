@@ -23,7 +23,7 @@ ECR_URI_PROCESS="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/osrm-processor"
 ECR_URI_DIRECT_PROCESS="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/osrm-direct-processor"
 ECR_URI_SPLIT="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/osrm-split"
 
-for instance_type in i3.large i3.xlarge; do
+for instance_type in i3.large i3.xlarge r5d.16xlarge; do
   job_queue_to_create="job-queue-${instance_type//./-}"
   compute_env="compute-env-${instance_type//./-}"
 
@@ -37,7 +37,7 @@ for instance_type in i3.large i3.xlarge; do
       --priority 1 \
       --compute-environment-order order=1,computeEnvironment=$compute_env
   else
-    echo "Job queue $job_queue already exists"
+    echo "Job queue $job_queue_to_create already exists"
   fi
 done
 
@@ -49,8 +49,8 @@ aws batch register-job-definition \
   --platform-capabilities EC2 \
   --container-properties "{
     \"image\": \"${ECR_URI_PROCESS}:latest\",
-    \"vcpus\": 2,
-    \"memory\": 8192,
+    \"vcpus\": 64,
+    \"memory\": 512000,
     \"privileged\": true,
     \"executionRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
     \"jobRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
@@ -66,8 +66,8 @@ aws batch register-job-definition \
   --platform-capabilities EC2 \
   --container-properties "{
     \"image\": \"${ECR_URI_DIRECT_PROCESS}:latest\",
-    \"vcpus\": 2,
-    \"memory\": 8192,
+    \"vcpus\": 64,
+    \"memory\": 512000,
     \"privileged\": true,
     \"executionRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
     \"jobRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
@@ -83,8 +83,8 @@ aws batch register-job-definition \
   --platform-capabilities EC2 \
   --container-properties "{
     \"image\": \"${ECR_URI_SPLIT}:latest\",
-    \"vcpus\": 2,
-    \"memory\": 8192,
+    \"vcpus\": 4,
+    \"memory\": 15250,
     \"privileged\": true,
     \"executionRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
     \"jobRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
