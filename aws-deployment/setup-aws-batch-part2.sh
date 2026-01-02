@@ -50,7 +50,7 @@ aws batch register-job-definition \
   --container-properties "{
     \"image\": \"${ECR_URI_PROCESS}:latest\",
     \"vcpus\": 64,
-    \"memory\": 512000,
+    \"memory\": 500000,
     \"privileged\": true,
     \"executionRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
     \"jobRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
@@ -67,7 +67,7 @@ aws batch register-job-definition \
   --container-properties "{
     \"image\": \"${ECR_URI_DIRECT_PROCESS}:latest\",
     \"vcpus\": 64,
-    \"memory\": 512000,
+    \"memory\": 500000,
     \"privileged\": true,
     \"executionRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
     \"jobRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",

@@ -6,8 +6,8 @@ set -e
 GIT_ROOT="$(git rev-parse --show-toplevel)"
 cd "$GIT_ROOT"
 
-ln ~/monaco-latest.osm.pbf
-ln ~/planet-latest.osm.pbf
+#ln ~/monaco-latest.osm.pbf
+#ln ~/planet-latest.osm.pbf
 # has to be within source dir
 
 docker buildx build \
@@ -16,5 +16,5 @@ docker buildx build \
   -t osrm-process-direct-data:latest \
   --load \
   .
-rm monaco-latest.osm.pbf
-rm planet-latest.osm.pbf
+#rm monaco-latest.osm.pbf
+#rm planet-latest.osm.pbf

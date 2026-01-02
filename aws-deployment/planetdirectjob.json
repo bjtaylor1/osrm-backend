@@ -1,0 +1,12 @@
+{
+  "jobName": "process-planet-direct-data",
+  "jobQueue": "job-queue-r5d-16xlarge",
+  "jobDefinition": "osrm-direct-processor-job",
+  "containerOverrides": {
+    "environment": [
+      {"name": "OSM_SOURCE", "value": "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf" },
+      {"name": "OSM_FILE", "value": "planet-latest" },
+      {"name": "PROFILE", "value": "bicycle_paved"}
+    ]
+  }
+}

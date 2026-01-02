@@ -60,7 +60,8 @@ RUN apt-get update && \
         liblua5.4-0 \
         libtbb12 \
         awscli \
-        ca-certificates && \
+        ca-certificates \
+        mdadm && \
     rm -rf /var/lib/apt/lists/* && \
     ldconfig /usr/local/lib
 
