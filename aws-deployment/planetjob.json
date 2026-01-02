@@ -1,10 +1,10 @@
 {
-  "jobName": "process-planet-data",
+  "jobName": "process-planet-data-c",
   "jobQueue": "job-queue-r5d-16xlarge",
   "jobDefinition": "osrm-processor-job",
   "containerOverrides": {
     "environment": [
-      {"name": "BASE_NAME", "value": "planet-latest.a" },
+      {"name": "BASE_NAME", "value": "planet-latest.c" },
       {"name": "PROFILE", "value": "bicycle_paved"}
     ]
   }

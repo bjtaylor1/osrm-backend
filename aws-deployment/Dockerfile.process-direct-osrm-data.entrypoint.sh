@@ -17,11 +17,27 @@ if [ ! -f "/data/nomount.flag" ]; then
     lsblk
     # setup big disk and swap space (if not running locally):
     
-    # Find all unmounted NVMe instance store devices (excluding root)
-    mapfile -t NVME_DEVS < <(lsblk -d -n -o NAME,MOUNTPOINT | grep nvme | grep -v '/$' | awk '{print "/dev/" $1}')
-    
+    # Find all unmounted NVMe instance store devices (excluding boot device and any with mounted partitions)
+    mapfile -t NVME_DEVS < <(
+        for dev in /dev/nvme[0-9]*n[0-9]*; do
+            # Skip if not a block device or if it's a partition (contains 'p')
+            [ -b "$dev" ] || continue
+            [[ "$dev" =~ p[0-9]+$ ]] && continue
+            
+            # Skip if device or any of its partitions are mounted
+            if lsblk -n -o MOUNTPOINT "$dev" 2>/dev/null | grep -q '^/.'; then
+                continue
+            fi
+            
+            # Only include disks larger than 100GB (instance stores are ~559GB)
+            SIZE_GB=$(lsblk -b -d -n -o SIZE "$dev" 2>/dev/null | awk '{print int($1/1024/1024/1024)}')
+            if [ "$SIZE_GB" -gt 10 ]; then
+                echo "$dev"
+            fi
+        done
+    )
+
     if [[ ${#NVME_DEVS[@]} -eq 0 ]]; then
-        lsblk
         handle_error "Instance store not found - exiting. We need the instance store to process the large amount of data"
     elif [[ ${#NVME_DEVS[@]} -eq 1 ]]; then
         # Single drive - format and mount directly
@@ -32,6 +48,12 @@ if [ ! -f "/data/nomount.flag" ]; then
         # Multiple drives - create RAID 0 for maximum performance
         log_progress "Found ${#NVME_DEVS[@]} NVMe drives: ${NVME_DEVS[*]}"
         log_progress "Creating RAID 0 array for maximum performance"
+        
+        # Wipe any existing filesystem signatures from the devices
+        for dev in "${NVME_DEVS[@]}"; do
+            log_progress "Wiping filesystem signatures from $dev"
+            wipefs -a "$dev" || true
+        done
         
         mdadm --create /dev/md0 \
             --level=0 \

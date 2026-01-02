@@ -62,6 +62,7 @@ RUN apt-get update && \
         awscli \
         ca-certificates \
         mdadm && \
+        wget && \
     rm -rf /var/lib/apt/lists/* && \
     ldconfig /usr/local/lib
 
