@@ -61,7 +61,7 @@ RUN apt-get update && \
         libtbb12 \
         awscli \
         ca-certificates \
-        mdadm && \
+        mdadm \
         wget && \
     rm -rf /var/lib/apt/lists/* && \
     ldconfig /usr/local/lib
