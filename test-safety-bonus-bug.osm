@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<osm version="0.6" generator="manual">
+  <bounds minlat="53.0" minlon="-1.0" maxlat="53.1" maxlon="-0.9"/>
+  <node id="1" lat="53.05" lon="-0.95" version="1"/>
+  <node id="2" lat="53.06" lon="-0.95" version="1"/>
+  <way id="604671594" version="1">
+    <nd ref="1"/>
+    <nd ref="2"/>
+    <tag k="highway" v="bicycle"/>
+    <tag k="name" v="Test Bicycle Path"/>
+  </way>
+</osm>

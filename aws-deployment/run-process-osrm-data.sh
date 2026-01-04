@@ -28,7 +28,7 @@ docker run --rm --platform linux/amd64 \
     -v "$SCRIPT_DIR/logs:/logs:rw" \
     -v "$SCRIPT_DIR/data:/data:rw" \
     -v "$awsdir:/root/.aws:ro" \
-    -e "BASE_NAME=monaco-latest.a" \
+    -e "BASE_NAME=nottinghamshireandlincolnshire" \
     -e "AWS_DEFAULT_REGION=us-east-1" \
     -e "AWS_PROFILE=gpxeditoradmin" \
     -e "PROFILE=bicycle_paved" \
