@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
 
-ROLE_NAME="OSRM-S3-Access"
+ROLE_NAME="OSRM-Instance-Role"
 INSTANCE_PROFILE_NAME="OSRM-Instance-Profile"
 
-echo "Creating IAM role for EC2 instances to access S3..."
+echo "Creating IAM role for EC2 instances to access S3 and EC2 metadata..."
 
 # Create role if it doesn't exist
 if aws iam get-role --role-name "$ROLE_NAME" &>/dev/null; then
@@ -24,6 +24,16 @@ else
     aws iam attach-role-policy \
         --role-name "$ROLE_NAME" \
         --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+fi
+
+# Attach EC2 read policy if not already attached
+if aws iam list-attached-role-policies --role-name "$ROLE_NAME" --query "AttachedPolicies[?PolicyArn=='arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess']" --output text | grep -q "AmazonEC2ReadOnlyAccess"; then
+    echo "EC2 read-only policy already attached to role"
+else
+    echo "Attaching EC2 read-only policy to role..."
+    aws iam attach-role-policy \
+        --role-name "$ROLE_NAME" \
+        --policy-arn arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
 fi
 
 # Create instance profile if it doesn't exist
@@ -47,6 +57,10 @@ fi
 
 echo ""
 echo "✓ IAM role and instance profile created successfully!"
+echo ""
+echo "Role $ROLE_NAME now has the following policies attached:"
+echo "  - AmazonS3ReadOnlyAccess (for S3 operations)"
+echo "  - AmazonEC2ReadOnlyAccess (for EC2 metadata/describe operations)"
 echo ""
 echo "To use in deploy-server.sh, add this line:"
 echo "    --iam-instance-profile Name=$INSTANCE_PROFILE_NAME \\"

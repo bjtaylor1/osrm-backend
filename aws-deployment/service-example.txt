@@ -1,0 +1,15 @@
+[Unit]
+Description=Router Service
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=admin
+WorkingDirectory=/data
+ExecStart=/usr/local/bin/osrm-routed/osrm-routed input.osrm -p 5000
+
+[Install]
+WantedBy=multi-user.target

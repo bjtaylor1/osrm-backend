@@ -64,7 +64,7 @@ else
 fi
 
 log_progress "Creating swap space (${SWAP_SPACE}GB)"
-dd if=/dev/zero of=/data/swapfile bs=1G count=$SWAP_SPACE
+dd if=/dev/zero of=/data/swapfile bs=1M count=$SWAP_SPACE #(small instance can't do bs=1G)
 ls -lh /data/swapfile
 chmod 600 /data/swapfile
 mkswap /data/swapfile
