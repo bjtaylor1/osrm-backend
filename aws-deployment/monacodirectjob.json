@@ -1,7 +1,7 @@
 {
   "jobName": "process-monaco-direct-data",
-  "jobQueue": "job-queue-job-queue-r6g-medium",
-  "jobDefinition": "osrm-direct-processor-job",
+  "jobQueue": "job-queue-r6i-large",
+  "jobDefinition": "osrm-direct-processor-job-small",
   "containerOverrides": {
     "environment": [
       {"name": "OSM_SOURCE", "value": "https://download.geofabrik.de/europe/monaco-latest.osm.pbf" },
