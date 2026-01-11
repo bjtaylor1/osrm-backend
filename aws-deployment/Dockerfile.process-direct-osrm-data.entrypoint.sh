@@ -67,20 +67,20 @@ if [ ! -f "/data/nomount.flag" ]; then
         log_progress "Formatting RAID array"
         mkfs.ext4 -F /dev/md0
         mount /dev/md0 /data
-    fi
-    
-    log_progress "Creating swap space"
-    dd if=/dev/zero of=/data/swapfile bs=1G count=100
-    ls -lh /data/swapfile
-    chmod 600 /data/swapfile
-    mkswap /data/swapfile
-    swapon /data/swapfile
 
-    df -h
+        log_progress "Creating swap space"
+        dd if=/dev/zero of=/data/swapfile bs=1G count=100
+        ls -lh /data/swapfile
+        chmod 600 /data/swapfile
+        mkswap /data/swapfile
+        swapon /data/swapfile
+
+    fi
 else
     log_progress "nomount.flag exists (must be running locally)"
 fi
 
+df -h
 cd /data
 
 #log_progress "Not downloading - using already existing file"
