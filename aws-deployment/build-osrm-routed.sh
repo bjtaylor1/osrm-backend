@@ -1,14 +1,14 @@
 #!/bin/bash
-
 set -e
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR"
-awsdir="$HOME/.aws"
+# Build OSRM routed binary in Docker image
 
-docker run --rm --platform linux/amd64 \
-    -v "$awsdir:/root/.aws:ro" \
-    build-osrm-routed:latest
+GIT_ROOT="$(git rev-parse --show-toplevel)"
+cd "$GIT_ROOT"
 
-echo ""
-echo "✅ Build osrm-routed finished!"
+docker buildx build \
+  --platform linux/amd64 \
+  -f ./aws-deployment/Dockerfile.build-osrm-routed \
+  -t build-osrm-routed:latest \
+  --load \
+  .
