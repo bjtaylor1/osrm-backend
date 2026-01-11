@@ -38,7 +38,11 @@ if [ ! -f "/data/nomount.flag" ]; then
     )
 
     if [[ ${#NVME_DEVS[@]} -eq 0 ]]; then
-        handle_error "Instance store not found - exiting. We need the instance store to process the large amount of data"
+        if [[ "$OSM_FILE" == "planet-latest" ]]; then
+            handle_error "Instance store not found - exiting. We need the instance store to process the large amount of data"
+        else
+            log_progress "No instance store found, but not necessary for processing $OSM_FILE"
+        fi
     elif [[ ${#NVME_DEVS[@]} -eq 1 ]]; then
         # Single drive - format and mount directly
         log_progress "Found 1 NVMe drive: ${NVME_DEVS[0]}"

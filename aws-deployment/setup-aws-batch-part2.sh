@@ -23,7 +23,7 @@ ECR_URI_PROCESS="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/osrm-processor"
 ECR_URI_DIRECT_PROCESS="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/osrm-direct-processor"
 ECR_URI_SPLIT="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/osrm-split"
 
-for instance_type in i3.large i3.xlarge r5d.16xlarge; do
+for instance_type in i3.large i3.xlarge r6g.medium r5d.16xlarge; do
   job_queue_to_create="job-queue-${instance_type//./-}"
   compute_env="compute-env-${instance_type//./-}"
 
