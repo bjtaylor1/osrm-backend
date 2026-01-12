@@ -11,7 +11,6 @@ log_progress() {
 }
 
 log_progress "Server initializing at $(date)"
-mkdir /data # it needs to exist first - mounting doesn't create it
 
 # Find all unmounted NVMe instance store devices (excluding boot device and any with mounted partitions)
 mapfile -t NVME_DEVS < <(
