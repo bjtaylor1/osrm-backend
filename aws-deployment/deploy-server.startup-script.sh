@@ -70,24 +70,11 @@ chmod 600 /data/swapfile
 mkswap /data/swapfile
 swapon /data/swapfile
 
-log_progress "Installing osrm-routed dependencies"
-apt-get update
-apt-get install -y --no-install-recommends \
-    libboost-date-time1.81.0 \
-    libboost-iostreams1.81.0 \
-    libboost-program-options1.81.0 \
-    libboost-thread1.81.0 \
-    liblua5.4-0 \
-    libtbb12 \
-    expat
-
-#log_progress "Downloading osrm-routed binary"
-#aws s3 cp s3://my-osrm-data-715/software/osrm-routed /usr/local/bin/osrm-routed
-#chmod +x /usr/local/bin/osrm-routed
-
 cd /data
 
 log_progress "Downloading processed data for region: $ROUTER_REGION"
 aws s3 cp --recursive "s3://my-osrm-data-715/output/" ./ --exclude "*" --include "${ROUTER_REGION}.*" --exclude "*.osm.pbf"
+
+systemctl start router-${ROUTER_REGION}
 
 ) > /tmp/startup.log 2>&1

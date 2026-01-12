@@ -1,0 +1,11 @@
+# AMI should already have these
+
+apt-get update
+apt-get install -y --no-install-recommends \
+    libboost-date-time1.81.0 \
+    libboost-iostreams1.81.0 \
+    libboost-program-options1.81.0 \
+    libboost-thread1.81.0 \
+    liblua5.4-0 \
+    libtbb12 \
+    expat
