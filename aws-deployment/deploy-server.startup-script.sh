@@ -63,7 +63,7 @@ else
     handle_error "Multiple nvme drives - ensure mdadm is installed and run RAID code"
 fi
 
-log_progress "Creating swap space (${SWAP_SPACE}GB)"
+log_progress "Creating swap space (${SWAP_SPACE}MB)"
 dd if=/dev/zero of=/data/swapfile bs=1M count=$SWAP_SPACE #(small instance can't do bs=1G)
 ls -lh /data/swapfile
 chmod 600 /data/swapfile
