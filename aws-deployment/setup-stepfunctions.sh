@@ -1,5 +1,5 @@
 #!/bin/bash
-set -xeu pipefail
+set -e
 
 SCRIPT_DIR=$(dirname "$0")
 ACCOUNT_ID=259514351789
