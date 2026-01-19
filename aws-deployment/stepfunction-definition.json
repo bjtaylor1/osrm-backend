@@ -24,6 +24,7 @@
           "Environment.$": "$.environment"
         }
       },
+      "ResultPath": "$.batch_result",
       "Next": "DeployServer"
     },
     "DeployServer": {
