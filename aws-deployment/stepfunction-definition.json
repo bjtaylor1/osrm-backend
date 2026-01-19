@@ -1,0 +1,69 @@
+{
+  "Comment": "OSRM deployment pipeline",
+  "StartAt": "CheckMode",
+  "States": {
+    "CheckMode": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.mode",
+          "StringEquals": "deploy-only",
+          "Next": "DeployServer"
+        }
+      ],
+      "Default": "SubmitBatchJob"
+    },
+    "SubmitBatchJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::batch:submitJob.sync",
+      "Parameters": {
+        "JobName.$": "$.job_name",
+        "JobQueue.$": "$.job_queue",
+        "JobDefinition.$": "$.job_definition",
+        "ContainerOverrides": {
+          "Environment.$": "$.environment"
+        }
+      },
+      "Next": "DeployServer"
+    },
+    "DeployServer": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "osrm-deploy-server",
+        "Payload": {
+          "router_region.$": "$.router_region"
+        }
+      },
+      "ResultPath": "$.deploy_result",
+      "ResultSelector": {
+        "instance_id.$": "$.Payload.instance_id",
+        "router_region.$": "$.Payload.router_region"
+      },
+      "Next": "RegisterInstance"
+    },
+    "RegisterInstance": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "osrm-register-instance",
+        "Payload": {
+          "instance_id.$": "$.deploy_result.instance_id"
+        }
+      },
+      "ResultPath": "$.register_result",
+      "Next": "SwapInstances"
+    },
+    "SwapInstances": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "osrm-swap-instances",
+        "Payload": {
+          "instance_id.$": "$.deploy_result.instance_id"
+        }
+      },
+      "End": true
+    }
+  }
+}
