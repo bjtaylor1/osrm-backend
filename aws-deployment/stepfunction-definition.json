@@ -53,7 +53,39 @@
         }
       },
       "ResultPath": "$.register_result",
-      "Next": "SwapInstances"
+      "Next": "CheckInstanceHealth"
+    },
+    "CheckInstanceHealth": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "osrm-check-instance-health",
+        "Payload": {
+          "instance_id.$": "$.deploy_result.instance_id"
+        }
+      },
+      "ResultPath": "$.health_check",
+      "ResultSelector": {
+        "status.$": "$.Payload.status",
+        "instance_id.$": "$.Payload.instance_id"
+      },
+      "Next": "IsHealthy"
+    },
+    "IsHealthy": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.health_check.status",
+          "StringEquals": "healthy",
+          "Next": "SwapInstances"
+        }
+      ],
+      "Default": "WaitForHealth"
+    },
+    "WaitForHealth": {
+      "Type": "Wait",
+      "Seconds": 30,
+      "Next": "CheckInstanceHealth"
     },
     "SwapInstances": {
       "Type": "Task",
