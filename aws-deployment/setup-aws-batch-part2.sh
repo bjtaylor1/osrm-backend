@@ -43,7 +43,7 @@ aws batch register-job-definition \
     \"jobRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
     \"ulimits\": [{\"name\": \"nofile\", \"hardLimit\": 65536, \"softLimit\": 65536}]
   }" \
-  --retry-strategy attempts=3 \
+  --retry-strategy attempts=1 \
   --timeout attemptDurationSeconds=86400
 
 aws batch register-job-definition \
@@ -60,7 +60,7 @@ aws batch register-job-definition \
     \"jobRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
     \"ulimits\": [{\"name\": \"nofile\", \"hardLimit\": 65536, \"softLimit\": 65536}]
   }" \
-  --retry-strategy attempts=3 \
+  --retry-strategy attempts=1 \
   --timeout attemptDurationSeconds=86400
 
 aws batch register-job-definition \
@@ -77,7 +77,7 @@ aws batch register-job-definition \
     \"jobRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
     \"ulimits\": [{\"name\": \"nofile\", \"hardLimit\": 65536, \"softLimit\": 65536}]
   }" \
-  --retry-strategy attempts=3 \
+  --retry-strategy attempts=1 \
   --timeout attemptDurationSeconds=86400
 
 aws batch register-job-definition \
@@ -94,7 +94,7 @@ aws batch register-job-definition \
     \"jobRoleArn\": \"arn:aws:iam::${ACCOUNT_ID}:role/OSRMBatchExecutionRole\",
     \"ulimits\": [{\"name\": \"nofile\", \"hardLimit\": 65536, \"softLimit\": 65536}]
   }" \
-  --retry-strategy attempts=3 \
+  --retry-strategy attempts=1 \
   --timeout attemptDurationSeconds=86400
 
 echo "Setup complete"

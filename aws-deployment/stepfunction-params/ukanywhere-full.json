@@ -9,16 +9,16 @@
   "job_definition": "osrm-direct-processor-job-small",
   "environment": [
     {
-      "name": "OSM_SOURCE",
-      "value": "https://download.geofabrik.de/europe/united-kingdom-latest.osm.pbf"
+      "Name": "OSM_SOURCE",
+      "Value": "https://download.geofabrik.de/europe/united-kingdom-latest.osm.pbf"
     },
     {
-      "name": "OSM_FILE",
-      "value": "united-kingdom-latest"
+      "Name": "OSM_FILE",
+      "Value": "united-kingdom-latest"
     },
     {
-      "name": "PROFILE",
-      "value": "anywhere"
+      "Name": "PROFILE",
+      "Value": "anywhere"
     }
   ]
 }
