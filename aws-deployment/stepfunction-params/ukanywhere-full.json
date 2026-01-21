@@ -1,0 +1,24 @@
+{
+  "router_region": "united-kingdom-latest",
+  "target_group_name": "AnywhereRouterTargetGroup",
+  "instance_type": "t3.micro",
+  "swap_space": "26",
+  "root_volume_size": 34,
+  "job_name": "process-uk-anywhere-europe",
+  "job_queue": "job-queue-r6i-large",
+  "job_definition": "osrm-direct-processor-job-small",
+  "environment": [
+    {
+      "name": "OSM_SOURCE",
+      "value": "https://download.geofabrik.de/europe/united-kingdom-latest.osm.pbf"
+    },
+    {
+      "name": "OSM_FILE",
+      "value": "united-kingdom-latest"
+    },
+    {
+      "name": "PROFILE",
+      "value": "anywhere"
+    }
+  ]
+}
