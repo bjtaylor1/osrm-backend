@@ -45,6 +45,12 @@ if [[ -z "$SWAP_SPACE" || "$SWAP_SPACE" == "None" ]]; then
     handle_error "swap-space tag not found on instance. Please tag the instance with swap-space."
 fi
 
+log_progress "Retrieving profile from instance tags"
+PROFILE=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=profile" --query 'Tags[0].Value' --output text --region us-east-1)
+if [[ -z "$PROFILE" || "$PROFILE" == "None" ]]; then
+    handle_error "profile tag not found on instance. Please tag the instance with profile."
+fi
+
 if [[ ${#NVME_DEVS[@]} -eq 0 ]]; then
     #no instance stores
     if [[ "$ROUTER_REGION" == "planet-latest" ]]; then
@@ -71,8 +77,8 @@ swapon /data/swapfile
 
 cd /data
 
-log_progress "Downloading processed data for region: $ROUTER_REGION"
-aws s3 cp --recursive "s3://my-osrm-data-715/output/" ./ --exclude "*" --include "${ROUTER_REGION}.*" --exclude "*.osm.pbf"
+log_progress "Downloading processed data for region: ${ROUTER_REGION}, profile ${PROFILE}"
+aws s3 cp --recursive "s3://my-osrm-data-715/output/${PROFILE}/" ./ --exclude "*" --include "${ROUTER_REGION}.*" --exclude "*.osm.pbf"
 
 log_progress "Downloading nginx configuration"
 aws s3 cp "s3://my-osrm-data-715/config/nginxconfig.txt" /etc/nginx/sites-available/default

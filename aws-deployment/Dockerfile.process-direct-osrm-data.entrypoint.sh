@@ -101,5 +101,5 @@ osrm-contract \
     --threads "$(nproc)"
 
 for file in "${OSM_FILE}".osrm*; do
-    aws s3 cp --no-progress "$file" "s3://my-osrm-data-715/output/$(basename "$file")"
+    aws s3 cp --no-progress "$file" "s3://my-osrm-data-715/output/${PROFILE}/$(basename "$file")"
 done

@@ -11,6 +11,7 @@ def lambda_handler(event, context):
     router_region = event['router_region']
     instance_type = event['instance_type']
     swap_space = event['swap_space']
+    profile = event['profile']
     root_volume_size = event.get('root_volume_size')
     
     instance_name = f"Router{datetime.now().strftime('%Y%m%d')}"
@@ -38,7 +39,8 @@ def lambda_handler(event, context):
             'Tags': [
                 {'Key': 'Name', 'Value': instance_name},
                 {'Key': 'router-region', 'Value': router_region},
-                {'Key': 'swap-space', 'Value': swap_space}
+                {'Key': 'swap-space', 'Value': swap_space},
+                {'Key': 'profile', 'Value': profile}
             ]
         }],
         'UserData': user_data

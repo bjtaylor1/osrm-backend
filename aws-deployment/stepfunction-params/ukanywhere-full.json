@@ -5,8 +5,8 @@
   "swap_space": "26",
   "root_volume_size": 34,
   "job_name": "process-uk-anywhere-europe",
-  "job_queue": "job-queue-r6i-large",
-  "job_definition": "osrm-direct-processor-job-small",
+  "job_queue": "job-queue-r5d-16xlarge",
+  "job_definition": "osrm-direct-processor-job",
   "environment": [
     {
       "Name": "OSM_SOURCE",
