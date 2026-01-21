@@ -42,8 +42,14 @@ else
   aws lambda create-function --function-name osrm-swap-instances --runtime python3.12 --role arn:aws:iam::$ACCOUNT_ID:role/lambda-osrm-role --handler osrm-swap-instances.lambda_handler --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-swap-instances.py osrm_utils.py) --timeout 60 --region us-east-1
 fi
 
-if aws stepfunctions describe-state-machine --state-machine-arn arn:aws:states:us-east-1:$ACCOUNT_ID:stateMachine:osrm-deployment-pipeline 2>/dev/null; then
-  aws stepfunctions update-state-machine --state-machine-arn arn:aws:states:us-east-1:$ACCOUNT_ID:stateMachine:osrm-deployment-pipeline --definition file://$SCRIPT_DIR/stepfunction-definition.json
+if aws stepfunctions describe-state-machine --state-machine-arn arn:aws:states:us-east-1:$ACCOUNT_ID:stateMachine:DeployServer 2>/dev/null; then
+  aws stepfunctions update-state-machine --state-machine-arn arn:aws:states:us-east-1:$ACCOUNT_ID:stateMachine:DeployServer --definition file://$SCRIPT_DIR/stepfunction-deploy-server.json
 else
-  aws stepfunctions create-state-machine --name osrm-deployment-pipeline --definition file://$SCRIPT_DIR/stepfunction-definition.json --role-arn arn:aws:iam::$ACCOUNT_ID:role/stepfunctions-osrm-role --region us-east-1
+  aws stepfunctions create-state-machine --name DeployServer --definition file://$SCRIPT_DIR/stepfunction-deploy-server.json --role-arn arn:aws:iam::$ACCOUNT_ID:role/stepfunctions-osrm-role --region us-east-1
+fi
+
+if aws stepfunctions describe-state-machine --state-machine-arn arn:aws:states:us-east-1:$ACCOUNT_ID:stateMachine:BuildAndDeployServer 2>/dev/null; then
+  aws stepfunctions update-state-machine --state-machine-arn arn:aws:states:us-east-1:$ACCOUNT_ID:stateMachine:BuildAndDeployServer --definition file://$SCRIPT_DIR/stepfunction-build-and-deploy-server.json
+else
+  aws stepfunctions create-state-machine --name BuildAndDeployServer --definition file://$SCRIPT_DIR/stepfunction-build-and-deploy-server.json --role-arn arn:aws:iam::$ACCOUNT_ID:role/stepfunctions-osrm-role --region us-east-1
 fi

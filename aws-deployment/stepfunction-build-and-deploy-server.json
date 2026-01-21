@@ -1,0 +1,32 @@
+{
+  "Comment": "OSRM build and deploy server pipeline - runs batch job then calls DeployServer step function",
+  "StartAt": "SubmitBatchJob",
+  "States": {
+    "SubmitBatchJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::batch:submitJob.sync",
+      "Parameters": {
+        "JobName.$": "$.job_name",
+        "JobQueue.$": "$.job_queue",
+        "JobDefinition.$": "$.job_definition",
+        "ContainerOverrides": {
+          "Environment.$": "$.environment"
+        }
+      },
+      "ResultPath": "$.batch_result",
+      "Next": "CallDeployServerStepFunction"
+    },
+    "CallDeployServerStepFunction": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::states:startExecution.sync:2",
+      "Parameters": {
+        "StateMachineArn": "arn:aws:states:us-east-1:259514351789:stateMachine:DeployServer",
+        "Input": {
+          "router_region.$": "$.router_region",
+          "target_group_name.$": "$.target_group_name"
+        }
+      },
+      "End": true
+    }
+  }
+}

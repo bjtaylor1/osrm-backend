@@ -1,32 +1,7 @@
 {
-  "Comment": "OSRM deployment pipeline",
-  "StartAt": "CheckMode",
+  "Comment": "OSRM deploy server pipeline - deploys a server without building data",
+  "StartAt": "DeployServer",
   "States": {
-    "CheckMode": {
-      "Type": "Choice",
-      "Choices": [
-        {
-          "Variable": "$.mode",
-          "StringEquals": "deploy-only",
-          "Next": "DeployServer"
-        }
-      ],
-      "Default": "SubmitBatchJob"
-    },
-    "SubmitBatchJob": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::batch:submitJob.sync",
-      "Parameters": {
-        "JobName.$": "$.job_name",
-        "JobQueue.$": "$.job_queue",
-        "JobDefinition.$": "$.job_definition",
-        "ContainerOverrides": {
-          "Environment.$": "$.environment"
-        }
-      },
-      "ResultPath": "$.batch_result",
-      "Next": "DeployServer"
-    },
     "DeployServer": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",

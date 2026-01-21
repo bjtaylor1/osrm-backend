@@ -74,6 +74,15 @@ cd /data
 log_progress "Downloading processed data for region: $ROUTER_REGION"
 aws s3 cp --recursive "s3://my-osrm-data-715/output/" ./ --exclude "*" --include "${ROUTER_REGION}.*" --exclude "*.osm.pbf"
 
+log_progress "Downloading nginx configuration"
+aws s3 cp "s3://my-osrm-data-715/config/nginxconfig.txt" /etc/nginx/sites-available/default
+
+log_progress "Testing nginx configuration"
+nginx -t || handle_error "Invalid nginx configuration"
+
+log_progress "Reloading nginx"
+systemctl reload nginx
+
 systemctl start router-${ROUTER_REGION}
 
 ) > /tmp/startup.log 2>&1

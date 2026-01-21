@@ -9,9 +9,12 @@ This guide explains how to use the OSRM deployment pipeline Step Function and ho
 The OSRM deployment pipeline consists of several interconnected files that must be kept in sync:
 
 ### Core Files
-1. **stepfunction-definition.json** - The Step Function state machine definition
-2. **setup-stepfunctions.sh** - Deployment script that creates/updates Lambda functions and Step Function
-3. **stepfunctions-permissions-policy.json** - IAM policy for Step Function execution role
+1. **stepfunction-deploy-server.json** - Step Function that deploys a server (without building data)
+2. **stepfunction-build-and-deploy-server.json** - Step Function that builds data then calls DeployServer
+3. **setup-stepfunctions.sh** - Deployment script that creates/updates Lambda functions and Step Functions
+4. **stepfunctions-permissions-policy.json** - IAM policy for Step Function execution role
+5. **stepfunction-params/DeployServer_template.json** - Parameter template for DeployServer step function
+6. **stepfunction-params/BuildAndDeployServer_template.json** - Parameter template for BuildAndDeployServer step function
 4. **stepfunctions-trust-policy.json** - Trust policy allowing Step Functions service to assume the role
 5. **lambda-permissions-policy.json** - IAM policy for Lambda execution role
 6. **lambda-trust-policy.json** - Trust policy allowing Lambda service to assume the role
@@ -26,7 +29,83 @@ The OSRM deployment pipeline consists of several interconnected files that must 
 
 ## Executing the Step Function
 
+### DeployServer Step Function
+
+This step function deploys a server without building new data. Use this when you already have processed OSRM data available.
+
+**Required Parameters** (see `stepfunction-params/DeployServer_template.json`):
+
+```json
+{
+  "router_region": "europe",
+  "target_group_name": "RouterTargetGroup"
+}
+```
+
+**Parameter Descriptions:**
+- **router_region** (required): Geographic region identifier (e.g., "europe", "north-america")
+- **target_group_name** (required): Name of the ALB target group for instance registration
+
+**Execution via AWS CLI:**
+```bash
+aws stepfunctions start-execution \
+  --state-machine-arn arn:aws:states:us-east-1:259514351789:stateMachine:DeployServer \
+  --input file://aws-deployment/stepfunction-params/DeployServer_template.json
+```
+
+### BuildAndDeployServer Step Function
+
+This step function runs an AWS Batch job to process OSM data, then calls the DeployServer step function.
+
+**Required Parameters** (see `stepfunction-params/BuildAndDeployServer_template.json`):
+
+```json
+{
+  "router_region": "europe",
+  "target_group_name": "RouterTargetGroup",
+  "job_name": "process-planet-europe",
+  "job_queue": "osrm-processing-queue",
+  "job_definition": "osrm-process-data",
+  "environment": [
+    {
+      "name": "OSM_SOURCE",
+      "value": "https://download.geofabrik.de/europe-latest.osm.pbf"
+    },
+    {
+      "name": "OSM_FILE",
+      "value": "europe-latest"
+    },
+    {
+      "name": "PROFILE",
+      "value": "bicycle_paved"
+    }
+  ]
+}
+```
+
+**Parameter Descriptions:**
+- **router_region** (required): Geographic region identifier
+- **target_group_name** (required): Name of the ALB target group
+- **job_name** (required): Name for the AWS Batch job execution
+- **job_queue** (required): AWS Batch queue name (e.g., "osrm-processing-queue")
+- **job_definition** (required): AWS Batch job definition name (e.g., "osrm-process-data")
+- **environment** (required): Array of environment variables for the Batch job:
+  - **OSM_SOURCE** (required): URL to download the OSM PBF file (e.g., "https://download.geofabrik.de/europe-latest.osm.pbf")
+  - **OSM_FILE** (required): Base filename without extension (e.g., "europe-latest" for "europe-latest.osm.pbf")
+  - **PROFILE** (required): OSRM routing profile name (e.g., "bicycle_paved", "car", "foot")
+
+**Execution via AWS CLI:**
+```bash
+aws stepfunctions start-execution \
+  --state-machine-arn arn:aws:states:us-east-1:259514351789:stateMachine:BuildAndDeployServer \
+  --input file://aws-deployment/stepfunction-params/BuildAndDeployServer_template.json
+```
+
 ### Required Parameters
+
+**DEPRECATED**: The sections below are for the legacy combined step function. Use the separate DeployServer and BuildAndDeployServer step functions instead (see sections above).
+
+---
 
 When starting a Step Function execution, you must provide the following input:
 
@@ -109,22 +188,67 @@ When modifying the Step Function or Lambda functions, ensure you maintain integr
    - Modify the relevant `.py` file(s) to accept the new parameter from `event`
    - Add appropriate validation and error handling
 
-2. **Update stepfunction-definition.json**:
+2. **Update Step Function definition**:
    - Add the parameter to the relevant Lambda invocation's `Payload` section
    - Use JSONPath notation (e.g., `"param_name.$": "$.param_name"`) to pass from Step Function input
 
-3. **Update Permissions** (if needed):
+3. **Update Parameter Template** (REQUIRED):
+   - Add the new parameter to the appropriate template file in `stepfunction-params/`
+   - Include example value and inline comment if helpful
+   **Without this step, users won't know about the new parameter!**
+
+4. **Update this Guide**:
+   - Document the parameter in the "Parameter Descriptions" section
+   - Explain its purpose, valid values, and whether it's required or optional
+
+5. **Update Permissions** (if needed):
    - If the new parameter requires access to new AWS services, update `lambda-permissions-policy.json`
    - If Step Function needs new permissions, update `stepfunctions-permissions-policy.json`
 
-4. **Update setup-stepfunctions.sh** (if needed):
-   - If adding new Lambda functions, add create/update blocks
-   - If adding new dependencies, update the zip file contents
-
-5. **Test**:
+6. **Test**:
    - Run `./setup-stepfunctions.sh` to deploy changes
-   - Execute Step Function with test input
+   - Execute Step Function with test input including the new parameter
    - Verify all states execute correctly
+
+
+### Adding a New Step Function
+
+**CRITICAL**: When creating or modifying Step Function definition files, you MUST update both `setup-stepfunctions.sh` AND the corresponding parameter template file.
+
+1. **Create the Step Function Definition**:
+   - Create new `.json` file in `aws-deployment/` (e.g., `stepfunction-my-workflow.json`)
+   - Define states, transitions, and integrations
+   - Use proper ARNs for Lambda functions and other AWS services
+
+2. **Create Parameter Template** (REQUIRED):
+   - Create template file in `aws-deployment/stepfunction-params/` (e.g., `MyWorkflow_template.json`)
+   - Include ALL required and optional parameters with example values
+   - Document parameter purpose inline or in this guide
+   **Without this step, users won't know what parameters to provide!**
+
+3. **Update setup-stepfunctions.sh** (REQUIRED):
+   ```bash
+   if aws stepfunctions describe-state-machine --state-machine-arn arn:aws:states:us-east-1:$ACCOUNT_ID:stateMachine:MyWorkflow 2>/dev/null; then
+     aws stepfunctions update-state-machine --state-machine-arn arn:aws:states:us-east-1:$ACCOUNT_ID:stateMachine:MyWorkflow --definition file://$SCRIPT_DIR/stepfunction-my-workflow.json
+   else
+     aws stepfunctions create-state-machine --name MyWorkflow --definition file://$SCRIPT_DIR/stepfunction-my-workflow.json --role-arn arn:aws:iam::$ACCOUNT_ID:role/stepfunctions-osrm-role --region us-east-1
+   fi
+   ```
+   **Without this step, your Step Function will not be deployed!**
+
+4. **Update this Guide**:
+   - Add the new template file to the Core Files section
+   - Document execution instructions with parameter descriptions
+   - Add example AWS CLI command using the template file
+
+5. **Update Permissions** (if needed):
+   - If calling new AWS services, update `stepfunctions-permissions-policy.json`
+   - If calling other Step Functions, ensure StartExecution permissions exist
+
+6. **Test**:
+   - Run `./setup-stepfunctions.sh` to deploy
+   - Test execution via console or CLI using the template
+
 
 ### Adding a New Lambda Function
 
@@ -133,11 +257,12 @@ When modifying the Step Function or Lambda functions, ensure you maintain integr
    - Import shared utilities from `osrm_utils.py` if needed
    - Implement `lambda_handler(event, context)` function
 
-2. **Update setup-stepfunctions.sh**:
+2. **Update setup-stepfunctions.sh** (REQUIRED):
    - Add create/update block for the new function
    - Include all necessary files in the zip package
+   **Without this step, your Lambda function will not be deployed!**
 
-3. **Update stepfunction-definition.json**:
+3. **Update Step Function definition(s)**:
    - Add new state(s) for the Lambda function
    - Wire up state transitions correctly
 
@@ -250,13 +375,15 @@ The target group must:
 
 ## Best Practices
 
-1. **Always test changes** in a development environment first
-2. **Version control** all changes to Step Function files
-3. **Document** any new parameters or states added
-4. **Keep permissions minimal** - only grant what's necessary
-5. **Use CloudWatch** Logs and X-Ray for debugging
-6. **Validate input** in Lambda functions before processing
-7. **Handle errors gracefully** with appropriate error messages
-8. **Monitor executions** regularly for failures
-9. **Keep shared utilities** (like `osrm_utils.py`) well-documented and tested
-10. **Update this guide** when making significant changes to the Step Function
+1. **ALWAYS update setup-stepfunctions.sh AND parameter templates** when creating/modifying Step Functions or adding parameters - these are the most commonly forgotten steps
+2. **Always test changes** in a development environment first
+3. **Version control** all changes to Step Function files and templates
+4. **Document** any new parameters or states added in both the guide and template files
+5. **Keep permissions minimal** - only grant what's necessary
+6. **Use CloudWatch** Logs and X-Ray for debugging
+7. **Validate input** in Lambda functions before processing
+8. **Handle errors gracefully** with appropriate error messages
+9. **Monitor executions** regularly for failures
+10. **Keep shared utilities** (like `osrm_utils.py`) well-documented and tested
+11. **Update this guide** when making significant changes to the Step Function
+12. **Keep template files in sync** with actual Step Function parameters - verify after each change

@@ -1,0 +1,4 @@
+{
+  "router_region": "monaco-latest",
+  "target_group_name": "RouterTargetGroup"
+}
