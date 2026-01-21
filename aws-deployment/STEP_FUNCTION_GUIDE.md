@@ -38,13 +38,25 @@ This step function deploys a server without building new data. Use this when you
 ```json
 {
   "router_region": "europe",
-  "target_group_name": "RouterTargetGroup"
+  "target_group_name": "RouterTargetGroup",
+  "instance_type": "t3.micro",
+  "swap_space": "1024"
+}
+```
+
+**Optional Parameters:**
+```json
+{
+  "root_volume_size": 16
 }
 ```
 
 **Parameter Descriptions:**
 - **router_region** (required): Geographic region identifier (e.g., "europe", "north-america")
 - **target_group_name** (required): Name of the ALB target group for instance registration
+- **instance_type** (required): EC2 instance type (e.g., "t3.micro", "t3.small", "i3.large")
+- **swap_space** (required): Swap space in MB (e.g., "1024", "2048", "102400")
+- **root_volume_size** (optional): Root EBS volume size in GB (e.g., 8, 16, 32). If not specified, uses the AMI's default volume size
 
 **Execution via AWS CLI:**
 ```bash
@@ -86,6 +98,9 @@ This step function runs an AWS Batch job to process OSM data, then calls the Dep
 **Parameter Descriptions:**
 - **router_region** (required): Geographic region identifier
 - **target_group_name** (required): Name of the ALB target group
+- **instance_type** (required): EC2 instance type (e.g., "t3.micro", "t3.small", "i3.large")
+- **swap_space** (required): Swap space in MB (e.g., "1024", "2048", "102400")
+- **root_volume_size** (optional): Root EBS volume size in GB. If not specified, uses the AMI's default volume size
 - **job_name** (required): Name for the AWS Batch job execution
 - **job_queue** (required): AWS Batch queue name (e.g., "osrm-processing-queue")
 - **job_definition** (required): AWS Batch job definition name (e.g., "osrm-process-data")

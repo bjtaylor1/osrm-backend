@@ -1,6 +1,9 @@
 {
   "router_region": "europe",
   "target_group_name": "RouterTargetGroup",
+  "instance_type": "t3.micro",
+  "swap_space": "1024",
+  "root_volume_size": 8,
   "job_name": "process-planet-europe",
   "job_queue": "osrm-processing-queue",
   "job_definition": "osrm-process-data",

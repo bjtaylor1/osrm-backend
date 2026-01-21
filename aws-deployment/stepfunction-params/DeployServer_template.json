@@ -1,4 +1,7 @@
 {
   "router_region": "monaco-latest",
-  "target_group_name": "RouterTargetGroup"
+  "target_group_name": "RouterTargetGroup",
+  "instance_type": "t3.micro",
+  "swap_space": "1024",
+  "root_volume_size": 8
 }
