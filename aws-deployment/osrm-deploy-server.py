@@ -2,54 +2,10 @@
 import boto3
 import os
 from datetime import datetime
+from osrm_utils import get_router_ami, get_security_group
 
 ec2 = boto3.client('ec2', region_name='us-east-1')
 
-def get_router_ami():
-    """
-    Get the RouterImage AMI owned by the current AWS account.
-    Throws an error if the AMI doesn't exist or if there's more than one.
-    """
-    # Get the current account ID
-    sts = boto3.client('sts')
-    account_id = sts.get_caller_identity()['Account']
-    
-    # Search for AMIs named "RouterImage" owned by this account
-    response = ec2.describe_images(
-        Owners=[account_id],
-        Filters=[
-            {'Name': 'name', 'Values': ['RouterImage']}
-        ]
-    )
-    
-    images = response['Images']
-    
-    if len(images) == 0:
-        raise ValueError(f"No AMI named 'RouterImage' found owned by account {account_id}")
-    elif len(images) > 1:
-        raise ValueError(f"Multiple AMIs named 'RouterImage' found ({len(images)} images). Please ensure only one exists.")
-    
-    return images[0]['ImageId']
-
-def get_security_group():
-    """
-    Get the 'allow-http-from-load-balancer' security group.
-    Throws an error if the security group doesn't exist or if there's more than one.
-    """
-    response = ec2.describe_security_groups(
-        Filters=[
-            {'Name': 'group-name', 'Values': ['allow-http-from-load-balancer']}
-        ]
-    )
-    
-    security_groups = response['SecurityGroups']
-    
-    if len(security_groups) == 0:
-        raise ValueError("No security group named 'allow-http-from-load-balancer' found. Please run setup-security-group.sh first.")
-    elif len(security_groups) > 1:
-        raise ValueError(f"Multiple security groups named 'allow-http-from-load-balancer' found ({len(security_groups)} groups). Please ensure only one exists.")
-    
-    return security_groups[0]['GroupId']
 
 def lambda_handler(event, context):
     router_region = event['router_region']

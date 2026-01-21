@@ -83,11 +83,13 @@ fi
 df -h
 cd /data
 
-#log_progress "Not downloading - using already existing file"
-#mv /${OSM_FILE?}.osm.pbf /data/
-wget --no-verbose "${OSM_SOURCE?}"
-wget --no-verbose "${OSM_SOURCE?}.md5"
-md5sum -c "${OSM_FILE?}.osm.pbf.md5"
+if [[ -f ${OSM_FILE}.osm.pbf ]]; then
+    log_progress "Not downloading - using already existing file"
+else
+    wget --no-verbose "${OSM_SOURCE?}"
+    wget --no-verbose "${OSM_SOURCE?}.md5"
+    md5sum -c "${OSM_FILE?}.osm.pbf.md5"
+fi
 
 osrm-extract \
     "${OSM_FILE}.osm.pbf" \

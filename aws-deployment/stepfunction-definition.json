@@ -49,7 +49,8 @@
       "Parameters": {
         "FunctionName": "osrm-register-instance",
         "Payload": {
-          "instance_id.$": "$.deploy_result.instance_id"
+          "instance_id.$": "$.deploy_result.instance_id",
+          "target_group_name.$": "$.target_group_name"
         }
       },
       "ResultPath": "$.register_result",
@@ -61,7 +62,8 @@
       "Parameters": {
         "FunctionName": "osrm-check-instance-health",
         "Payload": {
-          "instance_id.$": "$.deploy_result.instance_id"
+          "instance_id.$": "$.deploy_result.instance_id",
+          "target_group_name.$": "$.target_group_name"
         }
       },
       "ResultPath": "$.health_check",
@@ -93,7 +95,8 @@
       "Parameters": {
         "FunctionName": "osrm-swap-instances",
         "Payload": {
-          "instance_id.$": "$.deploy_result.instance_id"
+          "instance_id.$": "$.deploy_result.instance_id",
+          "target_group_name.$": "$.target_group_name"
         }
       },
       "End": true

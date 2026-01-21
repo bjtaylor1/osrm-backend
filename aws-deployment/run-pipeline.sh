@@ -1,5 +1,6 @@
 #!/bin/bash
 MODE=$1
+TARGET_GROUP_NAME=${2:-RouterTargetGroup}
 
 case $MODE in
   test)
@@ -13,7 +14,8 @@ case $MODE in
         {"name": "OSM_FILE", "value": "monaco-latest"},
         {"name": "PROFILE", "value": "bicycle_paved"}
       ],
-      "router_region": "monaco-latest"
+      "router_region": "monaco-latest",
+      "target_group_name": "'$TARGET_GROUP_NAME'"
     }'
     ;;
   prod)
@@ -27,17 +29,20 @@ case $MODE in
         {"name": "OSM_FILE", "value": "planet-latest"},
         {"name": "PROFILE", "value": "bicycle_paved"}
       ],
-      "router_region": "planet-latest"
+      "router_region": "planet-latest",
+      "target_group_name": "'$TARGET_GROUP_NAME'"
     }'
     ;;
   deploy-only)
     INPUT='{
       "mode": "deploy-only",
-      "router_region": "planet-latest"
+      "router_region": "planet-latest",
+      "target_group_name": "'$TARGET_GROUP_NAME'"
     }'
     ;;
   *)
-    echo "Usage: $0 {test|prod|deploy-only}"
+    echo "Usage: $0 {test|prod|deploy-only} [target_group_name]"
+    echo "  target_group_name defaults to 'RouterTargetGroup' if not provided"
     exit 1
     ;;
 esac

@@ -19,7 +19,7 @@ echo "🚀 Starting process DIRECT OSRM data..."
 
 osm_file=monaco-latest
 
-rm -rf "$SCRIPT_DIR/data"
+#rm -rf "$SCRIPT_DIR/data"
 mkdir -p "$SCRIPT_DIR/data"
 touch "$SCRIPT_DIR/data/nomount.flag" # tells it not to mount the bigdisk
 
@@ -33,7 +33,7 @@ docker run --rm --platform linux/amd64 \
     -e "OSM_FILE=$osm_file" \
     -e "AWS_DEFAULT_REGION=us-east-1" \
     -e "AWS_PROFILE=gpxeditoradmin" \
-    -e "PROFILE=bicycle_paved" \
+    -e "PROFILE=anywhere" \
     osrm-process-direct-data:latest
 
 echo ""

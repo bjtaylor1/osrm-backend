@@ -1,32 +1,24 @@
 #!/usr/bin/env python3
 import boto3
+from osrm_utils import get_target_group_arn
 
 ec2 = boto3.client('ec2', region_name='us-east-1')
 elbv2 = boto3.client('elbv2', region_name='us-east-1')
 
-def get_target_group_arn(name='RouterTargetGroup'):
-    """Get the ARN of a target group by name."""
-    response = elbv2.describe_target_groups(Names=[name])
-    target_groups = response.get('TargetGroups', [])
-    
-    if len(target_groups) == 0:
-        raise ValueError(f"No target group found with name '{name}'")
-    elif len(target_groups) > 1:
-        raise ValueError(f"Multiple target groups found with name '{name}'")
-    
-    return target_groups[0]['TargetGroupArn']
-
-TARGET_GROUP_ARN = get_target_group_arn()
 
 def lambda_handler(event, context):
     instance_id = event['instance_id']
+    target_group_name = event['target_group_name']
+    
+    # Look up the target group ARN from its name
+    target_group_arn = get_target_group_arn(target_group_name)
     
     # Deregister old instances and terminate them
-    current_targets = elbv2.describe_target_health(TargetGroupArn=TARGET_GROUP_ARN)['TargetHealthDescriptions']
+    current_targets = elbv2.describe_target_health(TargetGroupArn=target_group_arn)['TargetHealthDescriptions']
     old_instances = [t['Target']['Id'] for t in current_targets if t['Target']['Id'] != instance_id]
     
     if old_instances:
-        elbv2.deregister_targets(TargetGroupArn=TARGET_GROUP_ARN, Targets=[{'Id': i} for i in old_instances])
+        elbv2.deregister_targets(TargetGroupArn=target_group_arn, Targets=[{'Id': i} for i in old_instances])
         ec2.terminate_instances(InstanceIds=old_instances)
     
     return {'instance_id': instance_id, 'terminated': old_instances}

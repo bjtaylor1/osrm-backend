@@ -19,27 +19,27 @@ if ! aws iam get-role --role-name stepfunctions-osrm-role 2>/dev/null; then
 fi
 
 if aws lambda get-function --function-name osrm-deploy-server 2>/dev/null; then
-  aws lambda update-function-code --function-name osrm-deploy-server --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-deploy-server.py deploy-server.startup-script.sh)
+  aws lambda update-function-code --function-name osrm-deploy-server --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-deploy-server.py osrm_utils.py deploy-server.startup-script.sh)
 else
-  aws lambda create-function --function-name osrm-deploy-server --runtime python3.12 --role arn:aws:iam::$ACCOUNT_ID:role/lambda-osrm-role --handler osrm-deploy-server.lambda_handler --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-deploy-server.py deploy-server.startup-script.sh) --timeout 300 --region us-east-1
+  aws lambda create-function --function-name osrm-deploy-server --runtime python3.12 --role arn:aws:iam::$ACCOUNT_ID:role/lambda-osrm-role --handler osrm-deploy-server.lambda_handler --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-deploy-server.py osrm_utils.py deploy-server.startup-script.sh) --timeout 300 --region us-east-1
 fi
 
 if aws lambda get-function --function-name osrm-register-instance 2>/dev/null; then
-  aws lambda update-function-code --function-name osrm-register-instance --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-register-instance.py)
+  aws lambda update-function-code --function-name osrm-register-instance --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-register-instance.py osrm_utils.py)
 else
-  aws lambda create-function --function-name osrm-register-instance --runtime python3.12 --role arn:aws:iam::$ACCOUNT_ID:role/lambda-osrm-role --handler osrm-register-instance.lambda_handler --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-register-instance.py) --timeout 300 --region us-east-1
+  aws lambda create-function --function-name osrm-register-instance --runtime python3.12 --role arn:aws:iam::$ACCOUNT_ID:role/lambda-osrm-role --handler osrm-register-instance.lambda_handler --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-register-instance.py osrm_utils.py) --timeout 300 --region us-east-1
 fi
 
 if aws lambda get-function --function-name osrm-check-instance-health 2>/dev/null; then
-  aws lambda update-function-code --function-name osrm-check-instance-health --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-check-instance-health.py)
+  aws lambda update-function-code --function-name osrm-check-instance-health --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-check-instance-health.py osrm_utils.py)
 else
-  aws lambda create-function --function-name osrm-check-instance-health --runtime python3.12 --role arn:aws:iam::$ACCOUNT_ID:role/lambda-osrm-role --handler osrm-check-instance-health.lambda_handler --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-check-instance-health.py) --timeout 60 --region us-east-1
+  aws lambda create-function --function-name osrm-check-instance-health --runtime python3.12 --role arn:aws:iam::$ACCOUNT_ID:role/lambda-osrm-role --handler osrm-check-instance-health.lambda_handler --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-check-instance-health.py osrm_utils.py) --timeout 60 --region us-east-1
 fi
 
 if aws lambda get-function --function-name osrm-swap-instances 2>/dev/null; then
-  aws lambda update-function-code --function-name osrm-swap-instances --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-swap-instances.py)
+  aws lambda update-function-code --function-name osrm-swap-instances --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-swap-instances.py osrm_utils.py)
 else
-  aws lambda create-function --function-name osrm-swap-instances --runtime python3.12 --role arn:aws:iam::$ACCOUNT_ID:role/lambda-osrm-role --handler osrm-swap-instances.lambda_handler --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-swap-instances.py) --timeout 60 --region us-east-1
+  aws lambda create-function --function-name osrm-swap-instances --runtime python3.12 --role arn:aws:iam::$ACCOUNT_ID:role/lambda-osrm-role --handler osrm-swap-instances.lambda_handler --zip-file fileb://<(cd $SCRIPT_DIR && zip -q -r - osrm-swap-instances.py osrm_utils.py) --timeout 60 --region us-east-1
 fi
 
 if aws stepfunctions describe-state-machine --state-machine-arn arn:aws:states:us-east-1:$ACCOUNT_ID:stateMachine:osrm-deployment-pipeline 2>/dev/null; then
