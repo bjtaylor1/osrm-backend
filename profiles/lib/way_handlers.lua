@@ -383,11 +383,6 @@ function WayHandlers.surface(profile,way,result,data)
     result.forward_speed = math.min(profile.smoothness_speeds[smoothness], result.forward_speed)
     result.backward_speed = math.min(profile.smoothness_speeds[smoothness], result.backward_speed)
   end
-
-  local wayid = way:id()
-  if(wayid == 604671594) then
-    print('way '..wayid..', forward_speed = '..result.forward_speed..', backward_speed='..result.backward_speed)
-  end
 end
 
 -- scale speeds to get better average driving times
