@@ -108,3 +108,4 @@ lib/binding
 *.osm.pbf
 *.osm.pbf.md5
 *.osrm*
+aws-deployment/data/nomount.flag
