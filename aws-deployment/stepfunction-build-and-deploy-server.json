@@ -10,7 +10,20 @@
         "JobQueue.$": "$.job_queue",
         "JobDefinition.$": "$.job_definition",
         "ContainerOverrides": {
-          "Environment.$": "$.environment"
+          "Environment": [
+            {
+              "Name": "OSM_SOURCE",
+              "Value.$": "$.osm_source"
+            },
+            {
+              "Name": "OSM_FILE",
+              "Value.$": "$.osm_file"
+            },
+            {
+              "Name": "PROFILE",
+              "Value.$": "$.profile"
+            }
+          ]
         }
       },
       "ResultPath": "$.batch_result",

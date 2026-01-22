@@ -1,25 +1,13 @@
 {
   "router_region": "europe",
   "profile": "bicycle_paved",
+  "osm_source": "https://download.geofabrik.de/europe-latest.osm.pbf",
+  "osm_file": "europe-latest",
   "target_group_name": "RouterTargetGroup",
   "instance_type": "t3.micro",
   "swap_space": "1024",
   "root_volume_size": 8,
-  "job_name": "process-planet-europe",
-  "job_queue": "osrm-processing-queue",
-  "job_definition": "osrm-process-data",
-  "environment": [
-    {
-      "Name": "OSM_SOURCE",
-      "Value": "https://download.geofabrik.de/europe-latest.osm.pbf"
-    },
-    {
-      "Name": "OSM_FILE",
-      "Value": "europe-latest"
-    },
-    {
-      "Name": "PROFILE",
-      "Value": "bicycle_paved"
-    }
-  ]
+  "job_name": "process-planet",
+  "job_queue": "job-queue-r5d-16xlarge",
+  "job_definition": "osrm-direct-processor-job"
 }
