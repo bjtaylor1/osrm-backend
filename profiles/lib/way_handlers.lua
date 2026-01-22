@@ -358,7 +358,7 @@ function WayHandlers.surface(profile,way,result,data)
   local smoothness = way:get_value_by_key("smoothness")
   local highway = way:get_value_by_key('highway')
 
-  if ((surface == nil or surface == '') and (highway == nil or highway == '' or highway == 'service' or highway == 'track')) then
+  if ((surface == nil or surface == '')) then
     surface = 'mud'
   end
 
@@ -382,6 +382,13 @@ function WayHandlers.surface(profile,way,result,data)
   if smoothness and profile.smoothness_speeds[smoothness] then
     result.forward_speed = math.min(profile.smoothness_speeds[smoothness], result.forward_speed)
     result.backward_speed = math.min(profile.smoothness_speeds[smoothness], result.backward_speed)
+  end
+
+  local wayid = way:id();
+  if wayid == 234911572 then
+    print('234911572 forward_speed: '..result.forward_speed)
+    print('234911572 backward_speed: '..result.backward_speed)
+    print('234911572 surface: '..surface)
   end
 end
 

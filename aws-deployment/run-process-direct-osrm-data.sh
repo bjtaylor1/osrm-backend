@@ -17,7 +17,7 @@ awsdir="$HOME/.aws"
 
 echo "🚀 Starting process DIRECT OSRM data..."
 
-osm_file=monaco-latest
+osm_file=lincolnshire-latest
 
 #rm -rf "$SCRIPT_DIR/data"
 mkdir -p "$SCRIPT_DIR/data"
@@ -30,6 +30,7 @@ docker run --rm --platform linux/amd64 \
     -v "$SCRIPT_DIR/logs:/logs:rw" \
     -v "$SCRIPT_DIR/data:/data:rw" \
     -v "$awsdir:/root/.aws:ro" \
+    -e "SKIP_UPLOAD=true" \
     -e "OSM_FILE=$osm_file" \
     -e "AWS_DEFAULT_REGION=us-east-1" \
     -e "AWS_PROFILE=gpxeditoradmin" \

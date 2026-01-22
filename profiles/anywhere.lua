@@ -388,7 +388,7 @@ end
 
 function debug_way(way, result, data, msg)
   local id = way:id()
-  if id == 316886591 or id == 89349043 then
+  if id == 234911572 then
 --    local access = data.access or '(nil)'
     io.write(tostring(id)..": "..msg..", forward_rate = "..tostring(result.forward_rate)..", forward_speed = "..tostring(result.forward_speed).."\n")
   end 

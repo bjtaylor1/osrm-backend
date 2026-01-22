@@ -100,6 +100,11 @@ osrm-contract \
     "${OSM_FILE}.osrm" \
     --threads "$(nproc)"
 
-for file in "${OSM_FILE}".osrm*; do
-    aws s3 cp --no-progress "$file" "s3://my-osrm-data-715/output/${PROFILE}/$(basename "$file")"
-done
+if [[ "${SKIP_UPLOAD:-false}" == "true" ]]; then
+    log_progress "Skipping upload (SKIP_UPLOAD=true)"
+else
+    log_progress "Uploading processed files to S3"
+    for file in "${OSM_FILE}".osrm*; do
+        aws s3 cp --no-progress "$file" "s3://my-osrm-data-715/output/${PROFILE}/$(basename "$file")"
+    done
+fi
