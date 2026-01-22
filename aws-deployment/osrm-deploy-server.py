@@ -14,7 +14,7 @@ def lambda_handler(event, context):
     profile = event['profile']
     root_volume_size = event.get('root_volume_size')
     
-    instance_name = f"Router{datetime.now().strftime('%Y%m%d')}"
+    instance_name = f"Router_{router_region}_{profile}_{datetime.now().strftime('%Y%m%d')}"
     
     # Get the RouterImage AMI dynamically
     router_ami_id = get_router_ami()

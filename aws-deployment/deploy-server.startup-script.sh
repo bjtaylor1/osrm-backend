@@ -10,6 +10,41 @@ log_progress() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
 }
 
+setup_router_service() {
+    local region=$1
+    local service_name="router-${region}"
+    local service_file="/etc/systemd/system/${service_name}.service"
+    
+    log_progress "Creating systemd service: ${service_name}"
+    
+    cat > "${service_file}" <<EOF
+[Unit]
+Description=Router ${region} Service
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=admin
+WorkingDirectory=/data
+ExecStart=/usr/local/bin/osrm-routed ${region}.osrm -p 5001
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    log_progress "Reloading systemd daemon"
+    systemctl daemon-reload
+    
+    log_progress "Enabling ${service_name} service"
+    systemctl enable "${service_name}"
+    
+    log_progress "Starting ${service_name} service"
+    systemctl start "${service_name}"
+}
+
 log_progress "Server initializing at $(date)"
 
 # Find all unmounted NVMe instance store devices (excluding boot device and any with mounted partitions)
@@ -89,6 +124,6 @@ nginx -t || handle_error "Invalid nginx configuration"
 log_progress "Reloading nginx"
 systemctl reload nginx
 
-systemctl start router-${ROUTER_REGION}
+setup_router_service "${ROUTER_REGION}"
 
 ) > /tmp/startup.log 2>&1

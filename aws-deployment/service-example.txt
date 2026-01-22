@@ -9,7 +9,7 @@ Restart=always
 RestartSec=1
 User=admin
 WorkingDirectory=/data
-ExecStart=/usr/local/bin/osrm-routed/osrm-routed input.osrm -p 5000
+ExecStart=/usr/local/bin/osrm-routed monaco-latest.osrm -p 5001
 
 [Install]
 WantedBy=multi-user.target
