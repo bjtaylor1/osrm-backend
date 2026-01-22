@@ -23,6 +23,11 @@
         "events:DescribeRule"
       ],
       "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "states:StartExecution",
+      "Resource": "arn:aws:states:us-east-1:259514351789:stateMachine:*"
     }
   ]
 }
