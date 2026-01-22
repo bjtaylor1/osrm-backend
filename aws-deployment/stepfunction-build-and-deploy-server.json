@@ -23,6 +23,7 @@
         "StateMachineArn": "arn:aws:states:us-east-1:259514351789:stateMachine:DeployServer",
         "Input": {
           "router_region.$": "$.router_region",
+          "profile.$": "$.profile",
           "target_group_name.$": "$.target_group_name",
           "instance_type.$": "$.instance_type",
           "swap_space.$": "$.swap_space",
