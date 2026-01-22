@@ -905,7 +905,6 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
                                                get_connected_road_info);
                             }
 
-                            /*
                             if (is_uturn && turn != connected_roads.begin())
                             {
                                 util::Log(logWARNING)
@@ -921,8 +920,7 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
                                     << intersection_node << ", OSM link: "
                                     << toOSMLink(m_coordinates[intersection_node]);
                             }
-                            */
-                            
+
                             // In case a way restriction starts at a given location, add a turn onto
                             // every artificial node emanating here.
                             //
