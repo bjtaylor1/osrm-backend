@@ -1,0 +1,54 @@
+# Test requests that SHOULD be allowed
+GET https://router3.gpxplanner.app/routec/v1/mode/-2.19059,53.00246999999999;-1.8651972708338838,53.242210961173384?geometries=geojson&overview=full
+
+###
+
+GET https://router3.gpxplanner.app/routea/something
+
+###
+
+GET https://router3.gpxplanner.app/routeblah/test
+
+###
+
+GET https://gpxplanner.app/routec/test
+
+###
+
+OPTIONS https://router3.gpxplanner.app/routec/test
+
+###
+
+# Test requests that SHOULD be blocked by BlockInvalidPaths
+GET https://router3.gpxplanner.app/
+
+###
+
+GET https://router3.gpxplanner.app/admin
+
+###
+
+GET https://router3.gpxplanner.app/trytodiscoversomeendpoints/somethingelse
+
+###
+
+# Test requests that SHOULD be blocked by BlockInvalidMethods
+POST https://router3.gpxplanner.app/routec/test
+
+###
+
+DELETE https://router3.gpxplanner.app/routec/test
+
+###
+
+# Test requests that SHOULD be blocked by BlockDirectIPAccess
+# (accessing via IP instead of hostname)
+GET https://44.218.237.206/
+
+###
+
+# Test request that SHOULD be blocked by BlockScanners
+GET https://router3.gpxplanner.app/routec/test
+User-Agent: cypex.ai/scanning Mozilla/5.0
+
+###

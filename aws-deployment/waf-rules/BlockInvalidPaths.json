@@ -1,0 +1,31 @@
+{
+  "Name": "BlockInvalidPaths",
+  "Priority": 4,
+  "Statement": {
+    "NotStatement": {
+      "Statement": {
+        "ByteMatchStatement": {
+          "SearchString": "/route",
+          "FieldToMatch": {
+            "UriPath": {}
+          },
+          "TextTransformations": [
+            {
+              "Priority": 0,
+              "Type": "LOWERCASE"
+            }
+          ],
+          "PositionalConstraint": "STARTS_WITH"
+        }
+      }
+    }
+  },
+  "Action": {
+    "Block": {}
+  },
+  "VisibilityConfig": {
+    "SampledRequestsEnabled": true,
+    "CloudWatchMetricsEnabled": true,
+    "MetricName": "BlockInvalidPaths"
+  }
+}

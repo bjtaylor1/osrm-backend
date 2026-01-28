@@ -7,6 +7,8 @@ This directory contains the JSON definitions for each WAF rule. These can be use
 - **BlockIPSet.json** - Blocks IPs from the BlockedIPs IP set
 - **BlockDirectIPAccess.json** - Blocks requests not using allowed hostnames
 - **BlockScanners.json** - Blocks user-agents containing "scan"
+- **BlockInvalidPaths.json** - Blocks paths that don't start with `/route`
+- **BlockInvalidMethods.json** - Blocks HTTP methods other than GET and OPTIONS
 - **RateLimit.json** - Rate limits to 2000 requests per 5 minutes per IP
 
 ## Usage
@@ -21,5 +23,5 @@ When creating rules in the AWS Console:
 ## Notes
 
 - All SearchString values are plain text (no base64 encoding required in the UI)
-- Text transformations use LOWERCASE for case-insensitive matching
-- Priority order: BlockIPSet (0) → BlockDirectIPAccess (1) → BlockScanners (2) → RateLimit (3)
+- Text transformations use LOWERCASE for case-insensitive matching (except Method which uses NONE)
+- Priority order: BlockIPSet (0) → BlockDirectIPAccess (1) → BlockScanners (2) → RateLimit (3) → BlockInvalidPaths (4) → BlockInvalidMethods (5) → RateLimit (6)

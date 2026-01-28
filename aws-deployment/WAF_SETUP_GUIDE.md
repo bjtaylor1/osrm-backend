@@ -99,7 +99,52 @@ Click **Add new condition (OR)** and repeat for:
 - **Match type**: Contains string
 - **String to match**: `scan`
 - **Text transformation**: Lowercase
+- **Action**: Block- Click **Add rule**
+
+#### Rule 4: BlockInvalidPaths
+
+**Using JSON Editor:**
+- Copy contents from `waf-rules/BlockInvalidPaths.json`
+- Click **Add rule**
+
+**Using Rule Builder:**
+- Click **Add rules** → **Add my own rules and rule groups** → **Rule builder**
+- **Name**: `BlockInvalidPaths`
+- **Type**: Regular rule
+- **If a request**: doesn't match the statement (NOT)
+- **Inspect**: URI path
+- **Match type**: Starts with string
+- **String to match**: `/route`
+- **Text transformation**: Lowercase
 - **Action**: Block
+- Click **Add rule**
+
+#### Rule 5: BlockInvalidMethods
+
+**Using JSON Editor:**
+- Copy contents from `waf-rules/BlockInvalidMethods.json`
+- Click **Add rule**
+
+**Using Rule Builder:**
+- Click **Add rules** → **Add my own rules and rule groups** → **Rule builder**
+- **Name**: `BlockInvalidMethods`
+- **Type**: Regular rule
+- **If a request**: doesn't match the statement (NOT)
+- **Inspect**: HTTP method
+- **Match type**: Exactly matches string
+- **String to match**: `GET`
+- **Text transformation**: None
+
+Click **Add new condition (OR)** and add:
+- **Inspect**: HTTP method
+- **Match type**: Exactly matches string
+- **String to match**: `OPTIONS`
+- **Text transformation**: None
+
+- **Action**: Block
+- Click **Add rule**
+
+#### Rule 6: RateLimit
 **Using JSON Editor:**
 - Copy contents from `waf-rules/RateLimit.json`
 - Click **Add rule**
@@ -124,7 +169,9 @@ Ensure rules are in this order (drag to reorder if needed):
 1. BlockIPSet (Priority 0)
 2. BlockDirectIPAccess (Priority 1)
 3. BlockScanners (Priority 2)
-4. RateLimit (Priority 3)
+4. BlockInvalidPaths (Priority 4)
+5. BlockInvalidMethods (Priority 5)
+6. RateLimit (Priority 6)
 
 Click **Next**
 
@@ -141,7 +188,7 @@ Click **Next**
 ## Step 3: Verify Setup
 
 1. Go to **Web ACLs** → Click **RouterLoadBalancerWAF**
-2. Check **Rules** tab: Should show 4 rules
+2. Check **Rules** tab: Should show 6 rules
 3. Check **Associated AWS resources** tab: Should show RouterLoadBalancer
 4. Go to **IP sets** → Click **BlockedIPs**: Should be ready to receive IPs
 

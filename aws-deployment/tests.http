@@ -1,0 +1,6 @@
+GET https://router3.gpxplanner.app/routec/v1/mode/-2.19059,53.00246999999999;-1.8651972708338838,53.242210961173384?geometries=geojson&overview=full
+
+###
+
+GET https://router3.gpxplanner.app
+User-Agent: scanner
