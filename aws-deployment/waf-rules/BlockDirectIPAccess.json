@@ -1,0 +1,90 @@
+{
+  "Name": "BlockDirectIPAccess",
+  "Priority": 1,
+  "Statement": {
+    "NotStatement": {
+      "Statement": {
+        "OrStatement": {
+          "Statements": [
+            {
+              "ByteMatchStatement": {
+                "SearchString": "router3.gpxplanner.app",
+                "FieldToMatch": {
+                  "SingleHeader": {
+                    "Name": "host"
+                  }
+                },
+                "TextTransformations": [
+                  {
+                    "Priority": 0,
+                    "Type": "LOWERCASE"
+                  }
+                ],
+                "PositionalConstraint": "EXACTLY"
+              }
+            },
+            {
+              "ByteMatchStatement": {
+                "SearchString": "gpxplanner.app",
+                "FieldToMatch": {
+                  "SingleHeader": {
+                    "Name": "host"
+                  }
+                },
+                "TextTransformations": [
+                  {
+                    "Priority": 0,
+                    "Type": "LOWERCASE"
+                  }
+                ],
+                "PositionalConstraint": "EXACTLY"
+              }
+            },
+            {
+              "ByteMatchStatement": {
+                "SearchString": "www.gpxeditor.co.uk",
+                "FieldToMatch": {
+                  "SingleHeader": {
+                    "Name": "host"
+                  }
+                },
+                "TextTransformations": [
+                  {
+                    "Priority": 0,
+                    "Type": "LOWERCASE"
+                  }
+                ],
+                "PositionalConstraint": "EXACTLY"
+              }
+            },
+            {
+              "ByteMatchStatement": {
+                "SearchString": "gpxeditor.co.uk",
+                "FieldToMatch": {
+                  "SingleHeader": {
+                    "Name": "host"
+                  }
+                },
+                "TextTransformations": [
+                  {
+                    "Priority": 0,
+                    "Type": "LOWERCASE"
+                  }
+                ],
+                "PositionalConstraint": "EXACTLY"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "Action": {
+    "Block": {}
+  },
+  "VisibilityConfig": {
+    "SampledRequestsEnabled": true,
+    "CloudWatchMetricsEnabled": true,
+    "MetricName": "BlockDirectIPAccess"
+  }
+}

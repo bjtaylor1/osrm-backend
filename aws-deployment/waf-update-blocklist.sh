@@ -1,18 +1,21 @@
 #!/bin/bash
 #
-# Update AWS WAF IP Set with blocklist
+# Update AWS WAF IP blocklist
+#
+# This script updates the BlockedIPs IP set in an existing WAF configuration.
+# Run the manual setup first (see WAF_SETUP_GUIDE.md)
 #
 # Usage: ./waf-update-blocklist.sh [blocklist-file]
 #
 # Blocklist format (everything after # is ignored):
-#   192.168.1.100/32 # Malicious scanner
-#   10.0.0.50/32 # DDoS source
+#   192.168.1.100 # Malicious scanner
+#   10.0.0.50/24 # DDoS source network
 #   # Lines starting with # are skipped
 #
 
 set -e
 
-BLOCKLIST_FILE="${1:-ip-blocklist.txt}"
+BLOCKLIST_FILE="${1:-waf-ip-blocklist.txt}"
 IP_SET_NAME="BlockedIPs"
 
 if [[ ! -f "$BLOCKLIST_FILE" ]]; then
@@ -20,7 +23,9 @@ if [[ ! -f "$BLOCKLIST_FILE" ]]; then
     exit 1
 fi
 
-echo "Reading blocklist from: $BLOCKLIST_FILE"
+echo "Updating WAF IP blocklist"
+echo "========================="
+echo
 
 # Parse blocklist - extract IPs (everything before #), skip comment lines
 BLOCKED_IPS=()
@@ -40,18 +45,20 @@ if [[ ${#BLOCKED_IPS[@]} -eq 0 ]]; then
     exit 1
 fi
 
-echo "Found ${#BLOCKED_IPS[@]} IP(s) to block:"
-printf '  %s\n' "${BLOCKED_IPS[@]}"
-echo
+echo "Reading blocklist from: $BLOCKLIST_FILE"
+echo "Found ${#BLOCKED_IPS[@]} IP(s) to block"
 read -p "Press Enter to confirm and proceed with updating the WAF IP set..." confirmation
 echo
 
 # Get IP Set details
 echo "Looking up IP set: $IP_SET_NAME"
 IP_SET_INFO=$(aws wafv2 list-ip-sets --scope REGIONAL --query "IPSets[?Name=='$IP_SET_NAME'] | [0]" --output json)
+
 if [[ -z "$IP_SET_INFO" || "$IP_SET_INFO" == "null" ]]; then
     echo "Error: IP set '$IP_SET_NAME' not found"
-    echo "Run ./waf-setup.sh first to create the WAF configuration"
+    echo
+    echo "It looks like the WAF has not been set up yet."
+    echo "Please follow the manual setup guide in WAF_SETUP_GUIDE.md first."
     exit 1
 fi
 
@@ -68,15 +75,19 @@ echo
 
 # Update IP set
 echo "Updating IP set with new blocklist..."
-aws wafv2 update-ip-set \
+if aws wafv2 update-ip-set \
     --scope REGIONAL \
     --id "$IP_SET_ID" \
     --name "$IP_SET_NAME" \
     --addresses "${BLOCKED_IPS[@]}" \
-    --lock-token "$LOCK_TOKEN"
-
-echo
-echo "✓ Successfully updated WAF IP set with ${#BLOCKED_IPS[@]} IP(s)"
-echo
-echo "The changes are effective immediately across all WAF rules."
-echo "Note: All ${#BLOCKED_IPS[@]} IPs are blocked by ONE rule (BlockIPSet)."
+    --lock-token "$LOCK_TOKEN" 2>&1; then
+    echo
+    echo "✓ Successfully updated WAF IP set with ${#BLOCKED_IPS[@]} IP(s)"
+    echo
+    echo "The changes are effective immediately."
+    echo "All ${#BLOCKED_IPS[@]} IPs are blocked by the BlockIPSet rule."
+else
+    echo
+    echo "Error: Failed to update IP set"
+    exit 1
+fi

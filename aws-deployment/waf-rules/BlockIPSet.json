@@ -1,0 +1,17 @@
+{
+  "Name": "BlockIPSet",
+  "Priority": 0,
+  "Statement": {
+    "IPSetReferenceStatement": {
+      "ARN": "YOUR_IP_SET_ARN_HERE"
+    }
+  },
+  "Action": {
+    "Block": {}
+  },
+  "VisibilityConfig": {
+    "SampledRequestsEnabled": true,
+    "CloudWatchMetricsEnabled": true,
+    "MetricName": "BlockIPSet"
+  }
+}

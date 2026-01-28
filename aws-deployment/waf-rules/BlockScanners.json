@@ -1,0 +1,29 @@
+{
+  "Name": "BlockScanners",
+  "Priority": 2,
+  "Statement": {
+    "ByteMatchStatement": {
+      "SearchString": "scan",
+      "FieldToMatch": {
+        "SingleHeader": {
+          "Name": "user-agent"
+        }
+      },
+      "TextTransformations": [
+        {
+          "Priority": 0,
+          "Type": "LOWERCASE"
+        }
+      ],
+      "PositionalConstraint": "CONTAINS"
+    }
+  },
+  "Action": {
+    "Block": {}
+  },
+  "VisibilityConfig": {
+    "SampledRequestsEnabled": true,
+    "CloudWatchMetricsEnabled": true,
+    "MetricName": "BlockScanners"
+  }
+}

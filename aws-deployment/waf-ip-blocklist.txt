@@ -1,0 +1,27 @@
+# tip - do echo '<list>' | awk '{printf "%-20s %s\n", $1, "# <reason>"}'
+
+3.137.73.221         # cypex.ai/scanning
+3.143.33.63          # cypex.ai/scanning
+3.146.99.138         # cypex.ai/scanning
+3.149.59.26          # cypex.ai/scanning
+3.17.255.71          # cypex.ai/scanning
+3.22.104.232         # cypex.ai/scanning
+18.224.192.118       # cypex.ai/scanning
+18.221.137.47        # cypex.ai/scanning
+18.217.194.148       # cypex.ai/scanning
+18.117.57.162        # cypex.ai/scanning
+3.148.147.222        # cypex.ai/scanning
+52.14.122.207        # cypex.ai/scanning
+52.15.85.154         # cypex.ai/scanning
+52.14.58.0           # cypex.ai/scanning
+3.130.96.91          # cypex.ai/scanning
+3.136.208.236        # cypex.ai/scanning
+18.223.104.85        # cypex.ai/scanning
+3.140.182.19         # cypex.ai/scanning
+3.138.185.30         # cypex.ai/scanning
+18.190.163.148       # cypex.ai/scanning
+3.134.148.59         # cypex.ai/scanning
+3.146.111.124        # cypex.ai/scanning
+3.143.152.247        # cypex.ai/scanning
+3.132.23.201         # cypex.ai/scanning
+3.136.67.107         # cypex.ai/scanning
