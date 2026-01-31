@@ -1,7 +1,7 @@
 AWS_PROFILE=gpxeditorroot
 
 
-folder=s3://my-osrm-access-logs/router/AWSLogs/259514351789/elasticloadbalancing/us-east-1/2026/01/28
+folder=s3://my-osrm-access-logs/router/AWSLogs/259514351789/elasticloadbalancing/us-east-1/2026/01/30
 
 logfile=~/Downloads/elb.log
 rm -f $logfile

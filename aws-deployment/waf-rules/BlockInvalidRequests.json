@@ -1,0 +1,98 @@
+{
+  "Name": "BlockInvalidRequests",
+  "Priority": 4,
+  "Statement": {
+    "OrStatement": {
+      "Statements": [
+        {
+          "NotStatement": {
+            "Statement": {
+              "OrStatement": {
+                "Statements": [
+                  {
+                    "ByteMatchStatement": {
+                      "SearchString": "/route",
+                      "FieldToMatch": {
+                        "UriPath": {}
+                      },
+                      "TextTransformations": [
+                        {
+                          "Priority": 0,
+                          "Type": "LOWERCASE"
+                        }
+                      ],
+                      "PositionalConstraint": "STARTS_WITH"
+                    }
+                  },
+                  {
+                    "ByteMatchStatement": {
+                      "SearchString": "/nearest",
+                      "FieldToMatch": {
+                        "UriPath": {}
+                      },
+                      "TextTransformations": [
+                        {
+                          "Priority": 0,
+                          "Type": "LOWERCASE"
+                        }
+                      ],
+                      "PositionalConstraint": "STARTS_WITH"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "NotStatement": {
+            "Statement": {
+              "OrStatement": {
+                "Statements": [
+                  {
+                    "ByteMatchStatement": {
+                      "SearchString": "GET",
+                      "FieldToMatch": {
+                        "Method": {}
+                      },
+                      "TextTransformations": [
+                        {
+                          "Priority": 0,
+                          "Type": "NONE"
+                        }
+                      ],
+                      "PositionalConstraint": "EXACTLY"
+                    }
+                  },
+                  {
+                    "ByteMatchStatement": {
+                      "SearchString": "OPTIONS",
+                      "FieldToMatch": {
+                        "Method": {}
+                      },
+                      "TextTransformations": [
+                        {
+                          "Priority": 0,
+                          "Type": "NONE"
+                        }
+                      ],
+                      "PositionalConstraint": "EXACTLY"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "Action": {
+    "Block": {}
+  },
+  "VisibilityConfig": {
+    "SampledRequestsEnabled": true,
+    "CloudWatchMetricsEnabled": true,
+    "MetricName": "BlockInvalidRequests"
+  }
+}

@@ -2,20 +2,60 @@
   "Name": "BlockScanners",
   "Priority": 2,
   "Statement": {
-    "ByteMatchStatement": {
-      "SearchString": "scan",
-      "FieldToMatch": {
-        "SingleHeader": {
-          "Name": "user-agent"
-        }
-      },
-      "TextTransformations": [
+    "OrStatement": {
+      "Statements": [
         {
-          "Priority": 0,
-          "Type": "LOWERCASE"
+          "ByteMatchStatement": {
+            "SearchString": "scan",
+            "FieldToMatch": {
+              "SingleHeader": {
+                "Name": "user-agent"
+              }
+            },
+            "TextTransformations": [
+              {
+                "Priority": 0,
+                "Type": "LOWERCASE"
+              }
+            ],
+            "PositionalConstraint": "CONTAINS"
+          }
+        },
+        {
+          "ByteMatchStatement": {
+            "SearchString": "zgrab",
+            "FieldToMatch": {
+              "SingleHeader": {
+                "Name": "user-agent"
+              }
+            },
+            "TextTransformations": [
+              {
+                "Priority": 0,
+                "Type": "LOWERCASE"
+              }
+            ],
+            "PositionalConstraint": "CONTAINS"
+          }
+        },
+        {
+          "ByteMatchStatement": {
+            "SearchString": "cypex",
+            "FieldToMatch": {
+              "SingleHeader": {
+                "Name": "user-agent"
+              }
+            },
+            "TextTransformations": [
+              {
+                "Priority": 0,
+                "Type": "LOWERCASE"
+              }
+            ],
+            "PositionalConstraint": "CONTAINS"
+          }
         }
-      ],
-      "PositionalConstraint": "CONTAINS"
+      ]
     }
   },
   "Action": {
