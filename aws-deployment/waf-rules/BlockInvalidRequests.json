@@ -1,98 +1,193 @@
 {
-  "Name": "BlockInvalidRequests",
-  "Priority": 4,
-  "Statement": {
-    "OrStatement": {
-      "Statements": [
-        {
-          "NotStatement": {
-            "Statement": {
-              "OrStatement": {
-                "Statements": [
-                  {
-                    "ByteMatchStatement": {
-                      "SearchString": "/route",
-                      "FieldToMatch": {
-                        "UriPath": {}
-                      },
-                      "TextTransformations": [
-                        {
-                          "Priority": 0,
-                          "Type": "LOWERCASE"
-                        }
-                      ],
-                      "PositionalConstraint": "STARTS_WITH"
+    "Name": "BlockInvalidRequests",
+    "Priority": 4,
+    "Statement": {
+      "NotStatement": {
+        "Statement": {
+          "OrStatement": {
+            "Statements": [
+              {
+                "AndStatement": {
+                  "Statements": [
+                    {
+                      "ByteMatchStatement": {
+                        "SearchString": "/route",
+                        "FieldToMatch": {
+                          "UriPath": {}
+                        },
+                        "TextTransformations": [
+                          {
+                            "Priority": 0,
+                            "Type": "LOWERCASE"
+                          }
+                        ],
+                        "PositionalConstraint": "STARTS_WITH"
+                      }
+                    },
+                    {
+                      "OrStatement": {
+                        "Statements": [
+                          {
+                            "ByteMatchStatement": {
+                              "SearchString": "GET",
+                              "FieldToMatch": {
+                                "Method": {}
+                              },
+                              "TextTransformations": [
+                                {
+                                  "Priority": 0,
+                                  "Type": "NONE"
+                                }
+                              ],
+                              "PositionalConstraint": "EXACTLY"
+                            }
+                          },
+                          {
+                            "ByteMatchStatement": {
+                              "SearchString": "OPTIONS",
+                              "FieldToMatch": {
+                                "Method": {}
+                              },
+                              "TextTransformations": [
+                                {
+                                  "Priority": 0,
+                                  "Type": "NONE"
+                                }
+                              ],
+                              "PositionalConstraint": "EXACTLY"
+                            }
+                          }
+                        ]
+                      }
                     }
-                  },
-                  {
-                    "ByteMatchStatement": {
-                      "SearchString": "/nearest",
-                      "FieldToMatch": {
-                        "UriPath": {}
-                      },
-                      "TextTransformations": [
-                        {
-                          "Priority": 0,
-                          "Type": "LOWERCASE"
-                        }
-                      ],
-                      "PositionalConstraint": "STARTS_WITH"
+                  ]
+                }
+              },
+              {
+                "AndStatement": {
+                  "Statements": [
+                    {
+                      "ByteMatchStatement": {
+                        "SearchString": "/nearest",
+                        "FieldToMatch": {
+                          "UriPath": {}
+                        },
+                        "TextTransformations": [
+                          {
+                            "Priority": 0,
+                            "Type": "LOWERCASE"
+                          }
+                        ],
+                        "PositionalConstraint": "STARTS_WITH"
+                      }
+                    },
+                    {
+                      "OrStatement": {
+                        "Statements": [
+                          {
+                            "ByteMatchStatement": {
+                              "SearchString": "GET",
+                              "FieldToMatch": {
+                                "Method": {}
+                              },
+                              "TextTransformations": [
+                                {
+                                  "Priority": 0,
+                                  "Type": "NONE"
+                                }
+                              ],
+                              "PositionalConstraint": "EXACTLY"
+                            }
+                          },
+                          {
+                            "ByteMatchStatement": {
+                              "SearchString": "OPTIONS",
+                              "FieldToMatch": {
+                                "Method": {}
+                              },
+                              "TextTransformations": [
+                                {
+                                  "Priority": 0,
+                                  "Type": "NONE"
+                                }
+                              ],
+                              "PositionalConstraint": "EXACTLY"
+                            }
+                          }
+                        ]
+                      }
                     }
-                  }
-                ]
+                  ]
+                }
+              },
+              {
+                "AndStatement": {
+                  "Statements": [
+                    {
+                      "ByteMatchStatement": {
+                        "SearchString": "/match",
+                        "FieldToMatch": {
+                          "UriPath": {}
+                        },
+                        "TextTransformations": [
+                          {
+                            "Priority": 0,
+                            "Type": "LOWERCASE"
+                          }
+                        ],
+                        "PositionalConstraint": "STARTS_WITH"
+                      }
+                    },
+                    {
+                      "OrStatement": {
+                        "Statements": [
+                          {
+                            "ByteMatchStatement": {
+                              "SearchString": "POST",
+                              "FieldToMatch": {
+                                "Method": {}
+                              },
+                              "TextTransformations": [
+                                {
+                                  "Priority": 0,
+                                  "Type": "NONE"
+                                }
+                              ],
+                              "PositionalConstraint": "EXACTLY"
+                            }
+                          },
+                          {
+                            "ByteMatchStatement": {
+                              "SearchString": "OPTIONS",
+                              "FieldToMatch": {
+                                "Method": {}
+                              },
+                              "TextTransformations": [
+                                {
+                                  "Priority": 0,
+                                  "Type": "NONE"
+                                }
+                              ],
+                              "PositionalConstraint": "EXACTLY"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
               }
-            }
-          }
-        },
-        {
-          "NotStatement": {
-            "Statement": {
-              "OrStatement": {
-                "Statements": [
-                  {
-                    "ByteMatchStatement": {
-                      "SearchString": "GET",
-                      "FieldToMatch": {
-                        "Method": {}
-                      },
-                      "TextTransformations": [
-                        {
-                          "Priority": 0,
-                          "Type": "NONE"
-                        }
-                      ],
-                      "PositionalConstraint": "EXACTLY"
-                    }
-                  },
-                  {
-                    "ByteMatchStatement": {
-                      "SearchString": "OPTIONS",
-                      "FieldToMatch": {
-                        "Method": {}
-                      },
-                      "TextTransformations": [
-                        {
-                          "Priority": 0,
-                          "Type": "NONE"
-                        }
-                      ],
-                      "PositionalConstraint": "EXACTLY"
-                    }
-                  }
-                ]
-              }
-            }
+            ]
           }
         }
-      ]
+      }
+    },
+    "VisibilityConfig": {
+      "SampledRequestsEnabled": true,
+      "CloudWatchMetricsEnabled": true,
+      "MetricName": "BlockInvalidRequests"
+    },
+    "Action": {
+      "Block": {}
     }
-  },
-  "Action": {
-    "Block": {}
-  },
-  "VisibilityConfig": {
-    "SampledRequestsEnabled": true,
-    "CloudWatchMetricsEnabled": true,
-    "MetricName": "BlockInvalidRequests"
   }
-}
