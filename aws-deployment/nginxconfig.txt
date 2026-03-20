@@ -90,6 +90,14 @@ server {
 			return 204;
 		}
 
+		# Strip token param before proxying to OSRM (which rejects unknown params)
+		access_by_lua_block {
+			local args = ngx.var.args or ""
+			args = args:gsub("[&?]?token=[^&]*", "")
+			args = args:gsub("^&", "")
+			ngx.var.args = args
+		}
+
 		rewrite ^/match[^/]*/(.*) /match/$1 break;
 		proxy_pass http://127.0.0.1:5001;
 		proxy_set_header Host $host;
@@ -114,6 +122,14 @@ server {
 			return 204;
 		}
 
+		# Strip token param before proxying to OSRM (which rejects unknown params)
+		access_by_lua_block {
+			local args = ngx.var.args or ""
+			args = args:gsub("[&?]?token=[^&]*", "")
+			args = args:gsub("^&", "")
+			ngx.var.args = args
+		}
+
 		rewrite ^/route[^/]*/(.*) /route/$1 break;
 		proxy_pass http://127.0.0.1:5001;
 		proxy_set_header Host $host;
@@ -136,6 +152,14 @@ server {
 			add_header Access-Control-Max-Age 86400 always;
 			add_header Vary Origin always;
 			return 204;
+		}
+
+		# Strip token param before proxying to OSRM (which rejects unknown params)
+		access_by_lua_block {
+			local args = ngx.var.args or ""
+			args = args:gsub("[&?]?token=[^&]*", "")
+			args = args:gsub("^&", "")
+			ngx.var.args = args
 		}
 
 		rewrite ^/nearest[^/]*/(.*) /nearest/$1 break;
