@@ -62,7 +62,8 @@ RUN apt-get update && \
         awscli \
         ca-certificates \
         mdadm \
-        wget && \
+        wget \
+        libnginx-mod-http-lua && \
     rm -rf /var/lib/apt/lists/* && \
     ldconfig /usr/local/lib
 
