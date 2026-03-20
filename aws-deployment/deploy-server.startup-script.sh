@@ -116,6 +116,8 @@ log_progress "Downloading processed data for region: ${ROUTER_REGION}, profile $
 aws s3 cp --recursive "s3://my-osrm-data-715/output/${PROFILE}/" ./ --exclude "*" --include "${ROUTER_REGION}.*" --exclude "*.osm.pbf"
 
 log_progress "Downloading nginx configuration"
+mkdir -p /etc/nginx/lua
+aws s3 cp "s3://my-osrm-data-715/config/validate_token.lua" /etc/nginx/lua/validate_token.lua
 aws s3 cp "s3://my-osrm-data-715/config/nginxconfig.txt" /etc/nginx/sites-available/default
 
 log_progress "Testing nginx configuration"
