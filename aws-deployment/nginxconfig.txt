@@ -20,6 +20,9 @@
 
 # https://serverfault.com/questions/958965/nginx-enabling-cors-for-multiple-subdomains
 
+# ;; appends Lua's default search path so that require "resty.hmac" etc. still work
+lua_package_path "/etc/nginx/lua/?.lua;;";
+
 map $http_origin $allow_origin {
 	~^https://gpxplanner.app$ $http_origin;
 	~^https://(www\.)?gpxeditor.co.uk$ $http_origin;
@@ -90,13 +93,7 @@ server {
 			return 204;
 		}
 
-		# Strip token param before proxying to OSRM (which rejects unknown params)
-		access_by_lua_block {
-			local args = ngx.var.args or ""
-			args = args:gsub("[&?]?token=[^&]*", "")
-			args = args:gsub("^&", "")
-			ngx.var.args = args
-		}
+		access_by_lua_file /etc/nginx/lua/validate_token.lua;
 
 		rewrite ^/match[^/]*/(.*) /match/$1 break;
 		proxy_pass http://127.0.0.1:5001;
@@ -122,13 +119,7 @@ server {
 			return 204;
 		}
 
-		# Strip token param before proxying to OSRM (which rejects unknown params)
-		access_by_lua_block {
-			local args = ngx.var.args or ""
-			args = args:gsub("[&?]?token=[^&]*", "")
-			args = args:gsub("^&", "")
-			ngx.var.args = args
-		}
+		access_by_lua_file /etc/nginx/lua/validate_token.lua;
 
 		rewrite ^/route[^/]*/(.*) /route/$1 break;
 		proxy_pass http://127.0.0.1:5001;
@@ -154,13 +145,7 @@ server {
 			return 204;
 		}
 
-		# Strip token param before proxying to OSRM (which rejects unknown params)
-		access_by_lua_block {
-			local args = ngx.var.args or ""
-			args = args:gsub("[&?]?token=[^&]*", "")
-			args = args:gsub("^&", "")
-			ngx.var.args = args
-		}
+		access_by_lua_file /etc/nginx/lua/validate_token.lua;
 
 		rewrite ^/nearest[^/]*/(.*) /nearest/$1 break;
 		proxy_pass http://127.0.0.1:5001;
