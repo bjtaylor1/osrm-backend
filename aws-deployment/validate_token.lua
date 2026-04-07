@@ -1,19 +1,22 @@
 local ffi = require "ffi"
 local C = ffi.C
 
-ffi.cdef[[
-    typedef struct engine_st ENGINE;
-    typedef struct evp_md_st EVP_MD;
-    typedef struct evp_md_ctx_st EVP_MD_CTX;
+if not rawget(_G, "__validate_token_ffi_loaded") then
+    ffi.cdef[[
+        typedef struct engine_st ENGINE;
+        typedef struct evp_md_st EVP_MD;
+        typedef struct evp_md_ctx_st EVP_MD_CTX;
 
-    const EVP_MD *EVP_sha256(void);
-    unsigned char *HMAC(
-        const EVP_MD *evp_md,
-        const void *key, int key_len,
-        const unsigned char *data, size_t data_len,
-        unsigned char *md, unsigned int *md_len
-    );
-]]
+        const EVP_MD *EVP_sha256(void);
+        unsigned char *HMAC(
+            const EVP_MD *evp_md,
+            const void *key, int key_len,
+            const unsigned char *data, size_t data_len,
+            unsigned char *md, unsigned int *md_len
+        );
+    ]]
+    rawset(_G, "__validate_token_ffi_loaded", true)
+end
 
 local secret = "4cce76554d5790b5bef03c915e01d01ab8b5ba7bd3ff9ba37596626303c8ce52"
 
