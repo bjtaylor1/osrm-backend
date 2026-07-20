@@ -28,8 +28,9 @@ function setup()
       continue_straight_at_waypoint = false,
       mode_change_penalty           = 0,
       highway_change_penalty        = 0, --it is not worth turning off a highway onto a residential to avoid one traffic light.
-                                                -- ...but it might be worth it to avoid two or more!
+                                              -- ...but it might be worth it to avoid two or more!
       onto_primary_penalty          = 0, -- test 'off and on again' phenonenon on A9 (Golspie/Brora/Helmsdale/Dunbeath)
+      cycleway_road_transition_penalty = 2, -- small disincentive to leave or rejoin a road via a separate cycleway
       static_turn_cost              = 0,  -- extra penalty for every turn. abstract way of favouring rural routes.
       force_split_edges = true,
       process_call_tagless_node = false
@@ -115,6 +116,18 @@ function setup()
     service_penalties = {
       alley             = 0.5,
     },
+
+    -- Keep ordinary separately-mapped cycleways no better than the least
+    -- desirable normal motor-road rate. Deliberately exclude service=alley,
+    -- which has its own exceptional penalty below.
+    -- This affects routing weight only; their physical speed is unchanged.
+    -- default_speed is km/h; routing rates are metres/second. This mirrors
+    -- safety_handler's result.forward_rate = result.forward_speed / 3.6.
+    ordinary_cycleway_rate = default_speed / 3.6,
+
+    -- OSRM stores at least one decisecond per edge, so this makes a preferred
+    -- cycleway effectively weight-free without reporting an unrealistic ETA.
+    preferred_cycleway_rate = 1000,
 
     bicycle_speeds = {
       cycleway = default_speed,
@@ -250,7 +263,27 @@ function setup()
       'construction'
     }, 
 
+    relation_types = Sequence {
+      "route"
+    },
+
     highway_turn_classification = {
+      cycleway = 1,
+      motorway = 2,
+      motorway_link = 2,
+      trunk = 2,
+      trunk_link = 2,
+      primary = 2,
+      primary_link = 2,
+      secondary = 2,
+      secondary_link = 2,
+      tertiary = 2,
+      tertiary_link = 2,
+      unclassified = 2,
+      residential = 2,
+      living_street = 2,
+      service = 2,
+      road = 2
     },
 
     access_turn_classification = {}
@@ -364,7 +397,9 @@ function handle_bicycle_tags(profile,way,result,data)
 
   --debug-way(way,result,data,"D")
 
-  safety_handler(profile,way,result,data)
+  if safety_handler(profile,way,result,data) == false then
+    return false
+  end
 
   --debug-way(way,result,data,"E")
 
@@ -595,7 +630,7 @@ end
 
 
 
-function process_way(profile, way, result)
+function process_way(profile, way, result, relations)
   -- the initial filtering of ways based on presence of tags
   -- affects processing times significantly, because all ways
   -- have to be checked.
@@ -667,6 +702,10 @@ function process_way(profile, way, result)
     -- new handler to reject anything that isn't a surface we like, including unknown surfaces.
     unknown_surface_handler,
 
+    -- The surface whitelist above remains an absolute gate. Once accepted,
+    -- rank separately-mapped cycleways by smoothness and cycle-network membership.
+    cycleway_preference_handler,
+
     -- new handler to query postgis for built up area
     --builtup_area_handler,
 
@@ -703,8 +742,9 @@ function process_way(profile, way, result)
     result.backward_rate = profile.default_speed / 3.6
     result.forward_mode = mode.cycling
     result.backward_mode = mode.cycling
+    cycleway_preference_handler(profile, way, result, data, relations)
   else
-    WayHandlers.run(profile, way, result, data, handlers)
+    WayHandlers.run(profile, way, result, data, handlers, relations)
   end
 
 	--debug_way(way,result,data,"END")
@@ -761,6 +801,43 @@ function unknown_surface_handler(profile,way,result,data)
 	--debug-way(way,result,data,"ush_end")
 end
 
+function has_cycle_network_relation(way, relations)
+  if not relations then
+    return false
+  end
+
+  for _, relation_id in ipairs(relations:get_relations(way)) do
+    local relation = relations:relation(relation_id)
+    local cycle_network = relation:get_value_by_key("cycle_network")
+    if cycle_network and cycle_network ~= "" then
+      return true
+    end
+  end
+
+  return false
+end
+
+function cycleway_preference_handler(profile, way, result, data, relations)
+  -- Do not apply route-relation benefits to roads that happen to belong to a
+  -- cycle network. This rule is deliberately only for highway=cycleway.
+  if data.highway ~= "cycleway" then
+    return
+  end
+
+  local smoothness = way:get_value_by_key("smoothness")
+  local preferred = smoothness == "excellent" or has_cycle_network_relation(way, relations)
+
+  if preferred then
+    result.forward_rate = profile.preferred_cycleway_rate
+    result.backward_rate = profile.preferred_cycleway_rate
+  else
+    -- A smaller rate is a higher routing cost. Retain any future penalty that
+    -- makes the cycleway even worse, but never let it outrank a normal road.
+    result.forward_rate = math.min(result.forward_rate, profile.ordinary_cycleway_rate)
+    result.backward_rate = math.min(result.backward_rate, profile.ordinary_cycleway_rate)
+  end
+end
+
 
 function process_turn(profile, turn)
 
@@ -780,6 +857,17 @@ function process_turn(profile, turn)
   if turn.has_traffic_light then
      turn.duration = turn.duration + profile.properties.traffic_light_penalty
   end
+
+  local source_classification = turn.source_highway_turn_classification
+  local target_classification = turn.target_highway_turn_classification
+  local changes_between_road_and_cycleway =
+    (source_classification == 1 and target_classification == 2) or
+    (source_classification == 2 and target_classification == 1)
+
+  if changes_between_road_and_cycleway then
+    turn.duration = turn.duration + profile.properties.cycleway_road_transition_penalty
+  end
+
   if profile.properties.weight_name == 'cyclability' then
     turn.weight = turn.duration
   end
