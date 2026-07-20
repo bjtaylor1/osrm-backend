@@ -18,6 +18,7 @@
 
 #include "osrm/coordinate.hpp"
 
+#include <cstdlib>
 #include <limits>
 #include <string>
 
@@ -86,12 +87,43 @@ void ExtractorCallbacks::ProcessManeuverOverride(const InputManeuverOverride &ov
  */
 void ExtractorCallbacks::ProcessWay(const osmium::Way &input_way, const ExtractionWay &parsed_way)
 {
+    static const std::int64_t debug_way_id = []() -> std::int64_t
+    {
+        const auto *value = std::getenv("OSRM_DEBUG_WAY_ID");
+        if (value == nullptr)
+            return std::numeric_limits<std::int64_t>::lowest();
+
+        char *end = nullptr;
+        const auto parsed = std::strtoll(value, &end, 10);
+        if (end == value || *end != '\0')
+            return std::numeric_limits<std::int64_t>::lowest();
+
+        return static_cast<std::int64_t>(parsed);
+    }();
+    const bool debug_way = input_way.id() == debug_way_id;
+
+    const auto log_debug_way_result = [&input_way, &parsed_way](const char *decision)
+    {
+        util::Log() << "[way-debug " << input_way.id() << "] " << decision
+                    << ": nodes=" << input_way.nodes().size()
+                    << " modes=" << travelModeToString(parsed_way.forward_travel_mode) << "/"
+                    << travelModeToString(parsed_way.backward_travel_mode)
+                    << " speeds=" << parsed_way.forward_speed << "/" << parsed_way.backward_speed
+                    << " rates=" << parsed_way.forward_rate << "/" << parsed_way.backward_rate
+                    << " duration=" << parsed_way.duration << " weight=" << parsed_way.weight;
+    };
+
     if ((parsed_way.forward_travel_mode == extractor::TRAVEL_MODE_INACCESSIBLE ||
          parsed_way.forward_speed <= 0) &&
         (parsed_way.backward_travel_mode == extractor::TRAVEL_MODE_INACCESSIBLE ||
          parsed_way.backward_speed <= 0) &&
         parsed_way.duration <= 0)
     { // Only true if the way is assigned a valid speed/duration
+        if (debug_way)
+        {
+            log_debug_way_result("C++ callback REJECTED: no traversable mode with a positive "
+                                 "speed or duration");
+        }
         return;
     }
 
@@ -102,12 +134,21 @@ void ExtractorCallbacks::ProcessWay(const osmium::Way &input_way, const Extracti
          parsed_way.backward_rate <= 0) &&
         parsed_way.weight <= 0)
     { // Only true if the way is assigned a valid rate/weight and there is no duration fallback
+        if (debug_way)
+        {
+            log_debug_way_result(
+                "C++ callback REJECTED: no traversable mode with a positive rate or weight");
+        }
         return;
     }
 
     const auto &nodes = input_way.nodes();
     if (nodes.size() <= 1)
     { // safe-guard against broken data
+        if (debug_way)
+        {
+            log_debug_way_result("C++ callback REJECTED: way has fewer than two nodes");
+        }
         return;
     }
 
@@ -117,6 +158,8 @@ void ExtractorCallbacks::ProcessWay(const osmium::Way &input_way, const Extracti
                             << nodes.size();
         return;
     }
+
+    const auto edges_before = debug_way ? external_memory.all_edges_list.size() : 0;
 
     InternalExtractorEdge::DurationData forward_duration_data;
     InternalExtractorEdge::DurationData backward_duration_data;
@@ -477,6 +520,12 @@ void ExtractorCallbacks::ProcessWay(const osmium::Way &input_way, const Extracti
     auto way_id = OSMWayID{static_cast<std::uint64_t>(input_way.id())};
     external_memory.ways_list.push_back(way_id);
     external_memory.way_node_id_offsets.push_back(external_memory.used_node_id_list.size());
+
+    if (debug_way)
+    {
+        util::Log() << "[way-debug " << input_way.id() << "] C++ callback ACCEPTED: generated "
+                    << (external_memory.all_edges_list.size() - edges_before) << " directed edge(s)";
+    }
 }
 
 } // namespace osrm::extractor

@@ -12,6 +12,44 @@ local Measure = require("lib/measure")
 
 WayHandlers = {}
 
+-- Set OSRM_DEBUG_WAY_ID to trace one way through the profile without changing
+-- extraction output for all other ways.
+local DEBUG_WAY_ID = tonumber(os.getenv("OSRM_DEBUG_WAY_ID"))
+
+function WayHandlers.is_debug_way(way)
+  return DEBUG_WAY_ID ~= nil and way:id() == DEBUG_WAY_ID
+end
+
+local function debug_handler_name(handler)
+  for name, candidate in pairs(WayHandlers) do
+    if candidate == handler then
+      return "WayHandlers." .. name
+    end
+  end
+
+  -- Profile-specific handlers live in the profile's global environment.
+  for name, candidate in pairs(_G) do
+    if candidate == handler then
+      return name
+    end
+  end
+
+  return tostring(handler)
+end
+
+local function debug_result(result)
+  return string.format(
+    "modes=%s/%s speeds=%s/%s rates=%s/%s duration=%s weight=%s",
+    tostring(result.forward_mode),
+    tostring(result.backward_mode),
+    tostring(result.forward_speed),
+    tostring(result.backward_speed),
+    tostring(result.forward_rate),
+    tostring(result.backward_rate),
+    tostring(result.duration),
+    tostring(result.weight))
+end
+
 -- check that way has at least one tag that could imply routability-
 -- we store the checked tags in data, to avoid fetching again later
 function WayHandlers.tag_prefetch(profile,way,result,data)
@@ -353,12 +391,19 @@ end
 
 -- reduce speed on bad surfaces
 function WayHandlers.surface(profile,way,result,data)
-  local surface = way:get_value_by_key("surface")
+  local tagged_surface = way:get_value_by_key("surface")
+  local surface = tagged_surface
   local tracktype = way:get_value_by_key("tracktype")
   local smoothness = way:get_value_by_key("smoothness")
   local highway = way:get_value_by_key('highway')
+  local assumed_surfaced = profile.assumed_surfaced_highways and
+    profile.assumed_surfaced_highways[highway]
 
-  if ((surface == nil or surface == '')) then
+  -- Major roads are commonly missing an explicit surface tag. Preserve their
+  -- calculated speed when the profile says they can be assumed surfaced. Ways
+  -- outside that set (notably cycleways in bicycle_paved) still need a known,
+  -- permitted surface.
+  if (surface == nil or surface == '') and not assumed_surfaced then
     surface = 'mud'
   end
 
@@ -366,7 +411,7 @@ function WayHandlers.surface(profile,way,result,data)
     result.forward_speed = math.min(profile.surface_speeds[surface], result.forward_speed)
     result.backward_speed = math.min(profile.surface_speeds[surface], result.backward_speed)
   else
-    if(profile.assumed_surfaced_highways[highway] == nil) then
+    if not assumed_surfaced then
       -- if it's a bad or unknown surface, AND it's not a highway (all valid highways are assumed to be surfaced, as they don't always have explicit surface tags) then don't route down it.
       result.forward_speed = 0
       result.backward_speed = 0
@@ -385,7 +430,15 @@ function WayHandlers.surface(profile,way,result,data)
   end
 
   local wayid = way:id();
-  if wayid == 234911572 then
+  if WayHandlers.is_debug_way(way) then
+    print(string.format(
+      "[way-debug %d] surface evaluation: tagged_surface=%s effective_surface=%s configured_speed=%s assumed_surfaced=%s",
+      wayid,
+      tostring(tagged_surface),
+      tostring(surface),
+      tostring(profile.surface_speeds[surface]),
+      tostring(assumed_surfaced)))
+  elseif wayid == 234911572 then
     print('234911572 forward_speed: '..result.forward_speed)
     print('234911572 backward_speed: '..result.backward_speed)
     print('234911572 surface: '..surface)
@@ -728,10 +781,45 @@ end
 -- To ensure the correct order of method calls, use a Sequence of handler names.
 
 function WayHandlers.run(profile, way, result, data, handlers, relations)
+  local debug = WayHandlers.is_debug_way(way)
+  local wayid = way:id()
+
+  if debug then
+    print(string.format(
+      "[way-debug %d] starting handler chain: highway=%s route=%s access=%s",
+      wayid,
+      tostring(data.highway),
+      tostring(data.route),
+      tostring(data.access)))
+  end
+
   for i,handler in ipairs(handlers) do
-    if handler(profile, way, result, data, relations) == false then
+    local name = debug and debug_handler_name(handler) or nil
+    if debug then
+      print(string.format("[way-debug %d] -> %s: %s", wayid, name, debug_result(result)))
+    end
+
+    local accepted = handler(profile, way, result, data, relations)
+
+    if debug then
+      print(string.format(
+        "[way-debug %d] <- %s returned %s: %s",
+        wayid,
+        name,
+        tostring(accepted),
+        debug_result(result)))
+    end
+
+    if accepted == false then
+      if debug then
+        print(string.format("[way-debug %d] REJECTED by %s", wayid, name))
+      end
       return false
     end
+  end
+
+  if debug then
+    print(string.format("[way-debug %d] profile handler chain ACCEPTED: %s", wayid, debug_result(result)))
   end
 end
 

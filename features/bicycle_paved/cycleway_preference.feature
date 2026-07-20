@@ -65,6 +65,16 @@ Feature: Bicycle paved - cycleway preference
             | cycleway  | asphalt | excellent  |          | x     |
             | secondary | asphalt |            | 120      |       |
 
+    Scenario: Roads may omit their surface but cycleways may not
+        Then routability should be
+            | highway | surface  | bothw |
+            | primary |          | x     |
+            | primary | unknown  | x     |
+            | primary | mud      |       |
+            | cycleway |          |       |
+            | cycleway | unknown  |       |
+            | cycleway | asphalt  | x     |
+
     Scenario: Switching between a road and a separate cycleway has a small cost
         Given the node map
             """
