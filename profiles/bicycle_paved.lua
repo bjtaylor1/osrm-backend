@@ -321,6 +321,7 @@ function handle_bicycle_tags(profile,way,result,data)
   (not data.public_transport or data.public_transport=='') 
 --  (not data.bridge or data.bridge=='')
   then
+    debug_way(way, result, data, "REJECTED: no routable highway/route/transport tag")
     return false
   end
 
@@ -329,6 +330,7 @@ function handle_bicycle_tags(profile,way,result,data)
 
   data.access = find_access_tag(way, profile.access_tags_hierarchy)
   if data.access and profile.access_tag_blacklist[data.access] and (not (SurfaceWhitelist.whitelist_ways_by_id[id] == true)) then
+    debug_way(way, result, data, "REJECTED: blacklisted access=" .. tostring(data.access))
     return false
   end
 
@@ -350,28 +352,36 @@ function handle_bicycle_tags(profile,way,result,data)
   data.foot_backward = way:get_value_by_key("foot:backward")
   data.bicycle = way:get_value_by_key("bicycle")
 
- --debug-way(way,result,data,"A") 
+  debug_way(way,result,data,"tags loaded")
 
   speed_handler(profile,way,result,data)
 
-  --debug-way(way,result,data,"B")
+  debug_way(way,result,data,"after speed_handler")
 
   oneway_handler(profile,way,result,data)
 
-  --debug-way(way,result,data,"C")
+  debug_way(way,result,data,"after oneway_handler")
 
   cycleway_handler(profile,way,result,data)
 
-  --debug-way(way,result,data,"D")
+  debug_way(way,result,data,"after cycleway_handler")
 
-  safety_handler(profile,way,result,data)
+  local safety_result = safety_handler(profile,way,result,data)
+  if safety_result == false then
+    debug_way(
+      way,
+      result,
+      data,
+      "REJECTED by safety_handler: maxspeed=" .. tostring(data.maxspeed) ..
+        " bicycle=" .. tostring(data.bicycle) .. " junction=" .. tostring(data.junction))
+  end
 
-  --debug-way(way,result,data,"E")
+  debug_way(way,result,data,"after safety_handler")
 
   -- maxspeed
   limit( result, data.maxspeed, data.maxspeed_forward, data.maxspeed_backward )
 
-  --debug-way(way,result,data,"F")
+  debug_way(way,result,data,"after maxspeed limit")
 
   -- not routable if no speed assigned
   -- this avoid assertions in debug builds
@@ -382,14 +392,26 @@ function handle_bicycle_tags(profile,way,result,data)
     result.backward_mode = mode.inaccessible
   end
 
-  --debug-way(way,result,data,"G")
+  debug_way(way,result,data,"handle_bicycle_tags complete")
 end
 
 function debug_way(way, result, data, msg)
   local id = way:id()
-  if id == 316886591 or id == 89349043 then
---    local access = data.access or '(nil)'
-    io.write(tostring(id)..": "..msg..", forward_rate = "..tostring(result.forward_rate)..", forward_speed = "..tostring(result.forward_speed).."\n")
+  if WayHandlers.is_debug_way(way) then
+    print(string.format(
+      "[way-debug %d] %s: highway=%s access=%s modes=%s/%s speeds=%s/%s rates=%s/%s duration=%s weight=%s",
+      id,
+      msg,
+      tostring(data.highway),
+      tostring(data.access),
+      tostring(result.forward_mode),
+      tostring(result.backward_mode),
+      tostring(result.forward_speed),
+      tostring(result.backward_speed),
+      tostring(result.forward_rate),
+      tostring(result.backward_rate),
+      tostring(result.duration),
+      tostring(result.weight)))
   end 
 end
 
@@ -753,6 +775,12 @@ function unknown_surface_handler(profile,way,result,data)
       if surface == nil or (profile.surface_speeds[surface] == nil or profile.surface_speeds[surface] == 0) then
         result.forward_rate = 0
         result.backward_rate = 0
+        debug_way(
+          way,
+          result,
+          data,
+          "REJECTED by unknown_surface_handler: surface=" .. tostring(surface) ..
+            " highway_is_road=" .. tostring(profile.is_road[data.highway]))
         return false
       end
     end
