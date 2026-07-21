@@ -6,6 +6,7 @@ docker build -t osrm-backend-local -f docker/Dockerfile-debian .
 
 # 2. Extract
 docker run --rm -t \
+  -e OSRM_DEBUG_WAY_ID=130407245 \
   -v "$PWD/aws-deployment/data:/data" \
   osrm-backend-local \
   osrm-extract --threads 2 -p /opt/bicycle_paved.lua /data/data.osm.pbf
