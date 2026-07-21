@@ -19,7 +19,7 @@ function setup()
   return {
     properties = {
       u_turn_penalty                = 0,
-      traffic_light_penalty         = 0,
+      traffic_light_penalty         = 10,
       weight_name                   = 'cyclability',
 --      weight_name                   = 'duration',
       process_call_tagless_node     = false,
@@ -27,11 +27,8 @@ function setup()
       use_turn_restrictions         = false,
       continue_straight_at_waypoint = false,
       mode_change_penalty           = 0,
-      highway_change_penalty        = 0, --it is not worth turning off a highway onto a residential to avoid one traffic light.
-                                              -- ...but it might be worth it to avoid two or more!
-      onto_primary_penalty          = 0, -- test 'off and on again' phenonenon on A9 (Golspie/Brora/Helmsdale/Dunbeath)
-      cycleway_road_transition_penalty = 2, -- small disincentive to leave or rejoin a road via a separate cycleway
-      static_turn_cost              = 0,  -- extra penalty for every turn. abstract way of favouring rural routes.
+      highway_classification_increase_penalty = 10,
+      static_turn_cost              = 2,
       force_split_edges = true,
       process_call_tagless_node = false
     },
@@ -131,7 +128,7 @@ function setup()
 
     bicycle_speeds = {
       cycleway = default_speed,
-      trunk = default_speed, -- but there shouldn't be any trunks
+      trunk = default_speed,
       primary = default_speed,
       primary_link = default_speed,
       secondary = default_speed,
@@ -207,7 +204,7 @@ function setup()
       paving_stones = default_speed,
       tarmac = default_speed,
       paved = default_speed,
-      concrete = defaul_speed,
+      concrete = default_speed,
       ["concrete:lanes"] = default_speed,
       ["concrete:plates"] = default_speed,
       metal = default_speed,
@@ -269,12 +266,7 @@ function setup()
 
     highway_turn_classification = {
       cycleway = 1,
-      motorway = 2,
-      motorway_link = 2,
-      trunk = 2,
-      trunk_link = 2,
-      primary = 2,
-      primary_link = 2,
+      path = 1,
       secondary = 2,
       secondary_link = 2,
       tertiary = 2,
@@ -283,7 +275,13 @@ function setup()
       residential = 2,
       living_street = 2,
       service = 2,
-      road = 2
+      road = 2,
+      motorway = 3,
+      motorway_link = 3,
+      trunk = 3,
+      trunk_link = 3,
+      primary = 3,
+      primary_link = 3,
     },
 
     access_turn_classification = {}
@@ -845,14 +843,14 @@ function has_cycle_network_relation(way, relations)
 end
 
 function cycleway_preference_handler(profile, way, result, data, relations)
-  -- Do not apply route-relation benefits to roads that happen to belong to a
-  -- cycle network. This rule is deliberately only for highway=cycleway.
-  if data.highway ~= "cycleway" then
-    return
-  end
+  debug_way(way, result, data, "cycleway_preference_handler running")
 
   local smoothness = way:get_value_by_key("smoothness")
-  local preferred = smoothness == "excellent" or has_cycle_network_relation(way, relations)
+  -- Only a separately-mapped cycle facility may gain preference from its
+  -- route relation; smoothness remains assessed independently.
+
+  local preferred = smoothness == "excellent" or ((data.highway == "cycleway" or data.highway == "path") and
+    has_cycle_network_relation(way, relations)) or (data.highway == "path")
 
   if preferred then
     result.forward_rate = profile.preferred_cycleway_rate
@@ -887,12 +885,13 @@ function process_turn(profile, turn)
 
   local source_classification = turn.source_highway_turn_classification
   local target_classification = turn.target_highway_turn_classification
-  local changes_between_road_and_cycleway =
-    (source_classification == 1 and target_classification == 2) or
-    (source_classification == 2 and target_classification == 1)
+  if target_classification > source_classification then
+    turn.duration = turn.duration + profile.properties.highway_classification_increase_penalty
+  end
 
-  if changes_between_road_and_cycleway then
-    turn.duration = turn.duration + profile.properties.cycleway_road_transition_penalty
+  if turn.source_number_of_lanes > 2 and turn.angle > 30 and not turn.has_traffic_light then
+    -- e.g. 55.966113,-3.318558 (A90 in Edinburgh)
+    turn.duration = turn.duration + 2000
   end
 
   if profile.properties.weight_name == 'cyclability' then
@@ -902,12 +901,6 @@ function process_turn(profile, turn)
     turn.weight = turn.weight + profile.properties.mode_change_penalty
   end
   
-  if turn.source_number_of_lanes > 2 and turn.angle > 30 and not turn.has_traffic_light then
-    -- e.g. 55.966113,-3.318558 (A90 in Edinburgh)
-    turn.weight = turn.weight + 2000
-
-  end
-
   turn.weight = turn.weight + profile.properties.static_turn_cost
 
 end
