@@ -399,7 +399,8 @@ function handle_bicycle_tags(profile,way,result,data)
 
   debug_way(way,result,data,"after cycleway_handler")
 
-  if safety_handler(profile,way,result,data) == false then
+  local safety_result = safety_handler(profile,way,result,data)
+  if safety_result == false then
     debug_way(
       way,
       result,
