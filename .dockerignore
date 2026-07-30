@@ -1,2 +1,19 @@
+# Local source-control and editor state
+.git/
+**/.DS_Store
+
+# Local routing data and generated processing output
 aws-deployment/data/
 aws-deployment/output/
+aws-deployment/logs/
+*.osm.pbf
+*.osm.pbf.md5
+*.osrm*
+rasters/
+
+# Local build artifacts
+/build/
+/_build*/
+node_modules/
+**/obj/
+**/.gradle/

@@ -93,7 +93,7 @@ fi
 
 osrm-extract \
     "${OSM_FILE}.osm.pbf" \
-    --profile "/src/profiles/${PROFILE}.lua" \
+    --profile "/usr/local/share/osrm/profiles/${PROFILE}.lua" \
     --threads "$(nproc)"
 
 osrm-contract \

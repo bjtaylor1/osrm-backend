@@ -62,20 +62,22 @@ RUN apt-get update && \
         awscli \
         ca-certificates \
         mdadm \
-        wget \
-        libnginx-mod-http-lua && \
+        wget && \
     rm -rf /var/lib/apt/lists/* && \
     ldconfig /usr/local/lib
 
-COPY --from=builder /usr/local /usr/local
-COPY --from=builder /src /src
+# The processing job only needs these two executables and the installed profile
+# bundle. Do not retain the source tree, Git metadata, or build intermediates.
+COPY --from=builder /usr/local/bin/osrm-extract /usr/local/bin/osrm-extract
+COPY --from=builder /usr/local/bin/osrm-contract /usr/local/bin/osrm-contract
+COPY --from=builder /usr/local/share/osrm /usr/local/share/osrm
+COPY aws-deployment/Dockerfile.process-direct-osrm-data.entrypoint.sh /usr/local/bin/process-direct-osrm-data
 
-RUN mkdir -p /data /output /logs
+RUN chmod +x /usr/local/bin/process-direct-osrm-data && \
+    mkdir -p /data /output /logs
 
 ENV MALLOC_MMAP_THRESHOLD_=1048576
 ENV MALLOC_TRIM_THRESHOLD_=134217728
-ENV LUA_PATH="/profiles/?.lua"
+ENV LUA_PATH="/usr/local/share/osrm/profiles/?.lua;;"
 
-WORKDIR /src
-
-ENTRYPOINT ["./aws-deployment/Dockerfile.process-direct-osrm-data.entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/process-direct-osrm-data"]
